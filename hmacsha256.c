@@ -66,3 +66,11 @@ void hmacSHA256Final(hmacSHA256Context *ctx, uint8_t *mac){
     /* finalize work hash context to get the hmac*/
 	SHA256Final(&ctx->ctx, mac);
 }
+
+//TODO: keyLen...
+void hmachSHA256(uint8_t *data, int dataLen, uint8_t* key, uint8_t* output){
+	hmacSHA256Context myHmacSHA256Context;
+	hmacSHA256Init(&myHmacSHA256Context, key, 32);
+	hmacSHA256Update(&myHmacSHA256Context, data, dataLen);
+	hmacSHA256Final(&myHmacSHA256Context, output);
+}

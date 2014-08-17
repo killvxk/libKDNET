@@ -19,5 +19,6 @@ typedef struct _hmacSHA256Context {
 int hmacSHA256Init(hmacSHA256Context *ctx, const uint8_t *key, uint32_t kLength);
 void hmacSHA256Update(hmacSHA256Context *ctx, const uint8_t *data, uint32_t dLength);
 void hmacSHA256Final(hmacSHA256Context *ctx, uint8_t *mac);
+void hmachSHA256(uint8_t *data, int dataLen, uint8_t* key, uint8_t* output);
 
 #endif //__HMACSHA256_H__

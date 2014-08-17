@@ -93,7 +93,7 @@ typedef struct _KDNET_PACKET_HEADER
 	uint32_t Signature;
 	uint8_t ProtocolVersion;
     uint8_t Canal;
-    //CipheredData;
+    uint8_t CipheredData[4096]; //OMG !
 } KDNET_PACKET_HEADER, *PKDNET_PACKET_HEADER;
 
 typedef struct _KD_PACKET_HEADER{
