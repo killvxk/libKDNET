@@ -3,8 +3,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <memory.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "sha256.h"
+#include "hmacsha256.h"
 #include "aes.h"
 #include "kd.h"
 
@@ -430,6 +434,56 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 }
 
 
+
+WORD controlW[14*32];
+
+
+void kd_server(){
+	int socket_fd;
+	struct sockaddr_in sa;
+	//struct sockaddr_in debugee_sa;
+	socket_fd = socket(PF_INET, SOCK_DGRAM, 0);
+	if(socket_fd < 0){
+		printf("socket call failed");
+		exit(0);
+	}
+	
+	memset(&sa, 0, sizeof(struct sockaddr_in));
+	sa.sin_family = AF_INET;
+	sa.sin_addr.s_addr = inet_addr("192.168.0.11");
+	sa.sin_port = htons(50000);
+	
+	//Send POKE
+	sendto(socket_fd, poke, sizeof(poke), 0, (struct sockaddr *)&sa,sizeof(sa));
+	
+	uint8_t buffer[2048];
+	int n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
+	int i;
+	for(i=0; i<n; i++){
+		printf("%02x ", buffer[i]);
+		if(i%16 == 15){
+			printf("\n");
+		}
+	}
+	printf("\n\n");
+	
+	printf("...\n");
+	BYTE *unciphered_poke_resp = cbc_decrypt(buffer+6, n-6-16, controlW, buffer+n-16);
+	for(i=0; i<n-6-16; i++){
+		printf("%02x ", unciphered_poke_resp[i]);
+		if(i%16 == 15){
+			printf("\n");
+		}
+	}
+	printf("\n\n");
+	//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_poke_resp+8));	
+	
+	exit(0);
+}
+
+
+
+
 //http://articles.sysprogs.org/kdvmware/kdcom.shtml
 //http://j00ru.vexillium.org/?p=405
 //http://visi.kenshoto.com/static/apidocs/vstruct.defs.kdcom-module.html
@@ -440,7 +494,14 @@ int main(){
 		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	};
+	
+	BYTE hmacKey[32];
 	int i;
+	for(i=0; i<32; i++){
+		hmacKey[i] = controlKey[i]^0xFF;
+		printf("%02x ", hmacKey[i]);
+	}
+	printf("\n");
 	
 	printf("controlKey :\n");
 	for(i=0; i<32; i++){
@@ -448,17 +509,48 @@ int main(){
 	}
 	printf("\n");
 	
-	WORD controlW[14*32];
 	aes_key_setup(controlKey, controlW, 256);
+	
+	//kd_server();
+
 
 	printf("\nPoke :\n");
-	KDNET_PACKET_HEADER* poke_pkt = (KDNET_PACKET_HEADER*)poke;
-	printKDNET_PACKET(poke_pkt);
-	cbc_decrypt(poke+6, sizeof(poke)-6-16, controlW, poke+sizeof(poke)-16);
+	//KDNET_PACKET_HEADER* poke_pkt = (KDNET_PACKET_HEADER*)poke;
+	//printKDNET_PACKET(poke_pkt);
+	BYTE* tmp = cbc_decrypt(poke+6, 0x160, controlW, poke+sizeof(poke)-16);
+	uint8_t arf[2096];
+	memset(arf, 0, 2096);
+	for(i=0; i<6; i++){
+		arf[i] = poke[i];
+	};
+	for(i=0; i<0x160-16; i++){
+		arf[i+6] = tmp[i];
+	}
+	printf("\n\n");
+	for(i=0; i<0x166; i++){
+		printf("%02x ", arf[i]);
+		if(i%16 == 15){
+			printf("\n");
+		}
+	}
+	printf("\n");
+	
+	BYTE tmpSHA[32];
+	hmacSHA256Context myHmacSHA256Context;
+	hmacSHA256Init(&myHmacSHA256Context, hmacKey, 32);
+	hmacSHA256Update(&myHmacSHA256Context, arf, 0x166);
+	hmacSHA256Final(&myHmacSHA256Context, tmpSHA);
+	printf("\nChecksum:\n");
+	for(i=0; i<16; i++){
+		printf("%02x ", tmpSHA[i]);
+	}
+	printf("\n\n");
+	//exit(0);
+
 	
 	printf("\nPoke response :\n");
 	BYTE* tmp2 = cbc_decrypt(poke_resp+6, sizeof(poke_resp)-6-16, controlW, poke_resp+sizeof(poke_resp)-16);
-	
+		
 	//Compute the data canal key
 	WORD dataW[14*32];
 	BYTE dataKey[32];
@@ -475,10 +567,12 @@ int main(){
 	}
 	printf("\n");*/
 	
-	/*printf("\nConnection Check :\n");
+	printf("\nConnection Check :\n");
 	cbc_decrypt(conncheck+6, sizeof(conncheck)-6-16, dataW, conncheck+sizeof(conncheck)-16);
 	
-	printf("\nConnection Check response:\n");
+	//exit(0);
+	
+	/*printf("\nConnection Check response:\n");
 	cbc_decrypt(conncheck_resp+6, sizeof(conncheck_resp)-6-16, dataW, conncheck_resp+sizeof(conncheck_resp)-16);
 
 	printf("\nBreak :\n");
