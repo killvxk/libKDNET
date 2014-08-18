@@ -73,7 +73,7 @@ DbgKdCommandStringStateChange = 0x00003032
 #define DbgKdQueryMemoryApi                 0x0000315C
 #define DbgKdSwitchPartition                0x0000315D
 #define DbgKdMaximumManipulate              0x0000315E
-//New in v2
+//New in v
 #define DbgKdGetRegister					0x0000315F
 
 
@@ -89,6 +89,13 @@ typedef struct _DBGKD_LOAD_SYMBOLS64
      UCHAR UnloadSymbols;
 } DBGKD_LOAD_SYMBOLS64, *PDBGKD_LOAD_SYMBOLS64;
 
+typedef struct _KDNET_POST_HEADER{
+	uint8_t unknown[6];
+	uint8_t PacketNumber;
+	uint8_t unknown1;
+} KDNET_POST_HEADER, *PKDNET_POST_HEADER;
+
+
 typedef struct _KDNET_PACKET_HEADER
 {
 	uint32_t Signature;
@@ -96,6 +103,10 @@ typedef struct _KDNET_PACKET_HEADER
     uint8_t Canal;
     uint8_t CipheredData[4096]; //OMG !
 } KDNET_PACKET_HEADER, *PKDNET_PACKET_HEADER;
+
+
+
+
 
 typedef struct _KD_PACKET_HEADER{
 	uint32_t Signature;
@@ -109,6 +120,7 @@ typedef struct _KD_PACKET_HEADER{
 	};
 	
 }KD_PACKET_HEADER, *PKD_PACKET_HEADER;
+
 
 
 typedef struct _EXCEPTION_RECORD64

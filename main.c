@@ -164,9 +164,9 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 
 //TODO: NO COPY !
 void sendDataPkt(uint8_t *data, int dataLen){
-	//TODO: magic header (8 bytes) + global pkt_number ! 
 	//Replace pkt number...
-	data[6] = pkt_number++;
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)data;
+	tmp->PacketNumber = pkt_number++;
 	
 	int i;
 	//Add header
@@ -417,6 +417,8 @@ int main(){
 	BYTE *unciphered_break = cbc_decrypt(break_data+6, sizeof(break_data)-6-16, dataW, break_data+sizeof(break_data)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break+8));
 	
+	exit(0);
+	
 	printf("\nWait State :\n");
 	BYTE *unciphered_wait_state = cbc_decrypt(wait_state+6, sizeof(wait_state)-6-16, dataW, wait_state+sizeof(wait_state)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state+8));
@@ -433,7 +435,7 @@ int main(){
 	BYTE *unciphered_wait_state2 = cbc_decrypt(wait_state2+6, sizeof(wait_state2)-6-16, dataW, wait_state2+sizeof(wait_state2)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state2+8));
 	
-	exit(0);
+	//exit(0);
 
 	printf("\nGet Version API REQ :\n");
 	BYTE *unciphered_get_version_api_req = cbc_decrypt(get_version_api_req+6, sizeof(get_version_api_req)-6-16, dataW, get_version_api_req+sizeof(get_version_api_req)-16);
