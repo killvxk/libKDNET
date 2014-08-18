@@ -6,6 +6,7 @@
 #define USHORT uint16_t
 #define UCHAR uint8_t
 
+#define DBGKD_MAXSTREAM                     16
 
 enum{
 	PACKET_TYPE_UNUSED = 0,
@@ -127,6 +128,20 @@ typedef struct _DBGKM_EXCEPTION64
     ULONG FirstChance;
 } DBGKM_EXCEPTION64, *PDBGKM_EXCEPTION64;
 
+typedef struct _AMD64_DBGKD_CONTROL_REPORT
+{
+    ULONG64 Dr6;
+    ULONG64 Dr7;
+    ULONG EFlags;
+    USHORT InstructionCount;
+    USHORT ReportFlags;
+    UCHAR InstructionStream[DBGKD_MAXSTREAM];
+    USHORT SegCs;
+    USHORT SegDs;
+    USHORT SegEs;
+    USHORT SegFs;
+} AMD64_DBGKD_CONTROL_REPORT, *PAMD64_DBGKD_CONTROL_REPORT;
+
 typedef struct _DBGKD_WAIT_STATE_CHANGE64
 {
     ULONG NewState;
@@ -138,8 +153,9 @@ typedef struct _DBGKD_WAIT_STATE_CHANGE64
     union
     {
         DBGKM_EXCEPTION64 Exception;
-        DBGKD_LOAD_SYMBOLS64 LoadSymbols;
+        //DBGKD_LOAD_SYMBOLS64 LoadSymbols;
     } u;
+    AMD64_DBGKD_CONTROL_REPORT ControlReport;
 } DBGKD_WAIT_STATE_CHANGE64, *PDBGKD_WAIT_STATE_CHANGE64;
 
 typedef struct _DBGKD_GET_VERSION_API64

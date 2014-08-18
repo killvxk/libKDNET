@@ -10,6 +10,7 @@
 #include "sha256.h"
 #include "hmacsha256.h"
 #include "aes.h"
+#include "cbc_aes.h"
 #include "kd.h"
 
 #include "test_pkt.h"
@@ -31,85 +32,7 @@ WORD dataW[14*32];
 int socket_fd;
 struct sockaddr_in sa;
 
-//Only 256 Bits
-//TODO: no copy... bla bla bla, move it in aes.c...
-BYTE* cbc_decrypt(BYTE* ciphered, int ciphered_len, WORD* w, BYTE* iv){
-	BYTE current_clear_block[16];
-	BYTE last_ciphered_block[16];
-	BYTE current_ciphered_block[16];
-	BYTE *clear;
-	int i, j;
-	
-	clear = (BYTE*)malloc(sizeof(BYTE)*ciphered_len);
-	memcpy(last_ciphered_block, iv, 16);
-
-	/*printf("IV : ");
-	for(i=0; i<16; i++){
-		printf("%02x ", iv[i]);
-	}
-	printf("\n");
-	printf("First block : ");
-	for(i=0; i<16; i++){
-		printf("%02x ", ciphered[i]);
-	}
-	printf("\n");*/
-
-	
-	for(i=0; i<ciphered_len/16; i++){
-		memcpy(current_ciphered_block, ciphered+(i*16), 16);
-		aes_decrypt(current_ciphered_block, current_clear_block, w, 256);
-		for(j=0; j<16; j++){
-			current_clear_block[j] = current_clear_block[j]^last_ciphered_block[j];
-		}
-		memcpy(last_ciphered_block, current_ciphered_block, 16);
-		
-		for(j=0; j<16; j++){
-			printf("%02x ", current_clear_block[j]);
-		}
-		printf("\n");
-		memcpy(clear+(i*16), current_clear_block, 16);
-	}
-	return clear;
-}
-
-//TODO: NO COPY !!!
-//TODO: rename plaintext and ciphertext
-BYTE* cbc_encrypt(BYTE* clear, int clear_len, WORD* w, uint8_t* iv){
-	BYTE* ciphered;
-	BYTE last_ciphered_block[16];
-	BYTE current_ciphered_block[16];
-	BYTE current_clear_block[16];
-	int i, j;
-	
-	ciphered = (BYTE*)malloc(sizeof(BYTE)*clear_len);
-	memcpy(last_ciphered_block, iv, 16);
-	
-	for(i=0; i<clear_len/16; i++){
-		memcpy(current_clear_block, clear+(i*16), 16);
-		for(j=0; j<16; j++){
-			current_clear_block[j] = current_clear_block[j]^last_ciphered_block[j];
-		}
-		aes_encrypt(current_clear_block, current_ciphered_block, w, 256);
-		memcpy(last_ciphered_block, current_ciphered_block, 16);
-		for(j=0; j<16; j++){
-			printf("%02x ", current_ciphered_block[j]);
-		}
-		printf("\n");
-		memcpy(ciphered+(i*16), current_ciphered_block, 16);
-	}
-	return ciphered;
-}
-
-void test_cbc(){
-	WORD testcbcW[14*32];
-	aes_key_setup(test_cbc_key, testcbcW, 256);
-
-	BYTE* tmp = cbc_decrypt(test_cbc_data, sizeof(test_cbc_data), testcbcW, test_cbc_iv);
-	printf("\nEncrypted ->\n");
-	cbc_encrypt(tmp, sizeof(test_cbc_data), testcbcW, test_cbc_iv);
-}
-
-
+int pkt_number = 0;
 
 
 
@@ -119,6 +42,18 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 	printf("DataSize: %d\n", pkt->DataSize);
 	printf("PacketID: %08x\n", pkt->PacketID);
 	printf("Checksum: %08x\n", pkt->Checksum);
+	
+	if(pkt->Signature == 0x00000062){
+		printf("BREAKIN\n");
+		return;
+	}
+	
+	if(pkt->Signature == 0x69696969){
+		if(pkt->PacketType == 0x0006){
+			printf("RESET\n");
+			return;
+		}
+	}
 	
 	printf("ApiNumber: %08x\n", pkt->ApiNumber);
 	int i;
@@ -144,6 +79,7 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			printf("ProgramCounter %16lx\n", tmp->ProgramCounter);
 			
 			//TODO: printExceptionRecord
+			printf("FirstChance %08x\n", tmp->u.Exception.FirstChance);
 			printf("ExceptionCode %08x\n", tmp->u.Exception.ExceptionRecord.ExceptionCode);
 			printf("ExceptionFlags %08x\n", tmp->u.Exception.ExceptionRecord.ExceptionFlags);
 			printf("ExceptionRecord %016lx\n", tmp->u.Exception.ExceptionRecord.ExceptionRecord);
@@ -152,7 +88,19 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			for(i=0; i<15; i++){
 				printf("ExceptionInformation[%d] %016lx\n", i, tmp->u.Exception.ExceptionRecord.ExceptionInformation[i]);
 			}
-			printf("FirstChance %08x\n", tmp->u.Exception.FirstChance);
+			
+			printf("DR6 %016lx\n", tmp->ControlReport.Dr6);
+			printf("DR7 %016lx\n", tmp->ControlReport.Dr7);
+			printf("EFlags %08x\n", tmp->ControlReport.EFlags);
+			printf("InstructionCount %04x\n", tmp->ControlReport.InstructionCount);
+			printf("ReportFlags %04x\n", tmp->ControlReport.ReportFlags);
+			for(i=0; i<DBGKD_MAXSTREAM; i++){
+				printf("InstructionStream[%d] %02x\n", i, tmp->ControlReport.InstructionStream[i]);
+			}
+			printf("SegCs %04x\n", tmp->ControlReport.SegCs);
+			printf("SegDs %04x\n", tmp->ControlReport.SegDs);
+			printf("SegEs %04x\n", tmp->ControlReport.SegEs);
+			printf("SegFs %04x\n", tmp->ControlReport.SegFs);
 			break;
 		}
 		case DbgKdReadVirtualMemoryApi:
@@ -216,6 +164,10 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 
 //TODO: NO COPY !
 void sendDataPkt(uint8_t *data, int dataLen){
+	//TODO: magic header (8 bytes) + global pkt_number ! 
+	//Replace pkt number...
+	data[6] = pkt_number++;
+	
 	int i;
 	//Add header
 	KDNET_PACKET_HEADER finalPkt; //TODO: no static !
@@ -249,7 +201,62 @@ void sendDataPkt(uint8_t *data, int dataLen){
 	sendto(socket_fd, &finalPkt, dataLen+6+16, 0, (struct sockaddr *)&sa,sizeof(sa));
 }
 
+/*
+ * Called when a BREAKIN packet is received !
+ */ 
+void breakCallBack(){
+	uint8_t wait_state[] = {
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x08, 0x30, 0x30, 0x30, 0x30, 0x07, 0x00, 0xf0, 0x00,
+		0x26, 0x09, 0x00, 0x00, 0x8e, 0x2f, 0x00, 0x00, 0x30, 0x30, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x5a, 0xf6, 0x6b, 0x02, 0xf8, 0xff, 0xff,
+		0x90, 0x2b, 0xd7, 0x6b, 0x02, 0xf8, 0xff, 0xff, 0x03, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90, 0x2b, 0xd7, 0x6b, 0x02, 0xf8, 0xff, 0xff,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0xd9, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x70, 0xd9, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff,
+		0x15, 0xd4, 0xc9, 0x04, 0xa9, 0x3f, 0xc1, 0xc2, 0x83, 0xe6, 0xb3, 0x64, 0xc8, 0x4d, 0x3d, 0x09,
+		0x01, 0x00, 0x00, 0x00, 0x01, 0xf8, 0xff, 0xff, 0xf0, 0x0f, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x10, 0x00, 0x03, 0x00,
+		0xcc, 0xc3, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x10, 0x00, 0x2b, 0x00, 0x2b, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+	sendDataPkt(wait_state, sizeof(wait_state));
+}
 
+
+
+
+void resetCallBack(){
+	uint8_t reset_ack[] = {
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08, 0x69, 0x69, 0x69, 0x69, 0x06, 0x00, 0x00, 0x00,
+		0x26, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+	};
+	sendDataPkt(reset_ack, sizeof(reset_ack));
+	
+	//Always send wait_state after reset...
+	breakCallBack();
+}
+
+void handleKD_PACKET(KD_PACKET_HEADER* pkt){
+	if(pkt->Signature == 0x00000062){
+		printf("BREAKIN\n");
+		breakCallBack();
+		return;
+	}
+	
+	if(pkt->Signature == 0x69696969){
+		if(pkt->PacketType == 0x0006){
+			printf("RESET\n");
+			resetCallBack();
+			return;
+		}
+	}
+	
+}
 
 void kd_server(){
 	
@@ -266,29 +273,16 @@ void kd_server(){
 	sa.sin_port = htons(50000);
 	
 	//Send POKE
+	pkt_number++;
 	sendto(socket_fd, poke, sizeof(poke), 0, (struct sockaddr *)&sa,sizeof(sa));
-	
 	
 	//Receive POKE_RESP
 	uint8_t buffer[2048];
 	int n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
-	int i;
-	/*for(i=0; i<n; i++){
-		printf("%02x ", buffer[i]);
-		if(i%16 == 15){
-			printf("\n");
-		}
-	}
-	printf("\n\n");*/
-	
-	printf("...\n");
+	//int i;
 	BYTE *unciphered_poke_resp = cbc_decrypt(buffer+6, n-6-16, controlW, buffer+n-16);
 	
-	printf("Size %d \n", n-6-16);
-	
-	//exit(0);
-	
-	//Compute the canal key
+	//Compute the data canal key with POKE_RESP
 	BYTE dataKey[32];
 	SHA256Context mySHA256Context;
 	SHA256Init(&mySHA256Context);
@@ -309,15 +303,17 @@ void kd_server(){
 	n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
 	printf("Packet received : %d bytes \n", n);
 	
-	
 	//Connection established !
 	
 	//Get next_packet !
 	while(1){
 		n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
-		printf("Packet received : %d bytes \n", n);
+		printf("Packet received : %d bytes >>>>>>\n", n);
 		BYTE *unciphered_pkt = cbc_decrypt(buffer+6, n-6-16, dataW, buffer+n-16);
+		printf("\n<<<<\n");
+
 		printKD_PACKET((KD_PACKET_HEADER*)(unciphered_pkt+8));
+		handleKD_PACKET((KD_PACKET_HEADER*)(unciphered_pkt+8));
 	}
 	
 	exit(0);
@@ -330,7 +326,7 @@ void kd_server(){
 //http://articles.sysprogs.org/kdvmware/kdcom.shtml
 //http://j00ru.vexillium.org/?p=405
 //http://visi.kenshoto.com/static/apidocs/vstruct.defs.kdcom-module.html
-//http://devel.archefire.org/programming/static/os/ReactOS-0.3.14/include/reactos/windbgkd.h
+//https://code.google.com/p/reactos-mirror/source/browse/trunk/reactos/include/reactos/windbgkd.h
 int main(){
 
 	int i;
@@ -390,7 +386,6 @@ int main(){
 	printf("\nPoke response :\n");
 	BYTE* unciphered_poke_resp = cbc_decrypt(poke_resp+6, sizeof(poke_resp)-6-16, controlW, poke_resp+sizeof(poke_resp)-16);
 
-	exit(0);
 
 	BYTE dataKey[32];
 	SHA256Context mySHA256Context;
@@ -410,34 +405,51 @@ int main(){
 	printf("\nConnection Check :\n");
 	cbc_decrypt(conncheck+6, sizeof(conncheck)-6-16, dataW, conncheck+sizeof(conncheck)-16);
 	
-	exit(0);
-	
-	/*printf("\nConnection Check response:\n");
+	printf("\nConnection Check response:\n");
 	cbc_decrypt(conncheck_resp+6, sizeof(conncheck_resp)-6-16, dataW, conncheck_resp+sizeof(conncheck_resp)-16);
+	
+	//...
+	printf("\nPOKE (repeat):\n");
+	cbc_decrypt(poke_repeat+6, 0x160, controlW, poke_repeat+sizeof(poke_repeat)-16);
+	//...
 
 	printf("\nBreak :\n");
-	cbc_decrypt(break_data+6, sizeof(break_data)-6-16, dataW, break_data+sizeof(break_data)-16);*/
+	BYTE *unciphered_break = cbc_decrypt(break_data+6, sizeof(break_data)-6-16, dataW, break_data+sizeof(break_data)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break+8));
 	
-	printf("\nBreak ACK :\n");
-	BYTE *unciphered_break_ack = cbc_decrypt(break_ack+6, sizeof(break_ack)-6-16, dataW, break_ack+sizeof(break_ack)-16);
-	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
-
+	printf("\nWait State :\n");
+	BYTE *unciphered_wait_state = cbc_decrypt(wait_state+6, sizeof(wait_state)-6-16, dataW, wait_state+sizeof(wait_state)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state+8));
+	
+	printf("\nReset:\n");
+	BYTE *unciphered_reset = cbc_decrypt(reset+6, sizeof(reset)-6-16, dataW, reset+sizeof(reset)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_reset+8));
+	
+	printf("\nReset ACK:\n");
+	BYTE *unciphered_reset_ack = cbc_decrypt(reset_ack+6, sizeof(reset_ack)-6-16, dataW, reset_ack+sizeof(reset_ack)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_reset_ack+8));
+	
+	printf("\nWait State 2:\n");
+	BYTE *unciphered_wait_state2 = cbc_decrypt(wait_state2+6, sizeof(wait_state2)-6-16, dataW, wait_state2+sizeof(wait_state2)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state2+8));
+	
+	exit(0);
 
 	printf("\nGet Version API REQ :\n");
-	unciphered_break_ack = cbc_decrypt(get_version_api_req+6, sizeof(get_version_api_req)-6-16, dataW, get_version_api_req+sizeof(get_version_api_req)-16);
-	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
+	BYTE *unciphered_get_version_api_req = cbc_decrypt(get_version_api_req+6, sizeof(get_version_api_req)-6-16, dataW, get_version_api_req+sizeof(get_version_api_req)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_req+8));
 	
 	printf("\nGet Version API RESP :\n");
-	unciphered_break_ack = cbc_decrypt(get_version_api_resp+6, sizeof(get_version_api_resp)-6-16, dataW, get_version_api_resp+sizeof(get_version_api_resp)-16);
-	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
+	BYTE *unciphered_get_version_api_resp = cbc_decrypt(get_version_api_resp+6, sizeof(get_version_api_resp)-6-16, dataW, get_version_api_resp+sizeof(get_version_api_resp)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_resp+8));
 
 	printf("Read Virtual Memory API RESP\n");
-	unciphered_break_ack = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
-	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
+	BYTE *unciphered_read_virtual_memory_api_resp = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8));
 	
 	printf("Get Register RESP\n");
-	unciphered_break_ack = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);
-	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
+	BYTE* unciphered_get_register_resp = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_register_resp+8));
 	
 	//unciphered_break_ack = cbc_decrypt(cmd_data+6, sizeof(cmd_data)-6-16, dataW, cmd_data+sizeof(cmd_data)-16);
 	//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
