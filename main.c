@@ -540,8 +540,6 @@ int main(int argc, char* argv[]){
 	printf("\nWait State 2:\n");
 	BYTE *unciphered_wait_state2 = cbc_decrypt(wait_state2+6, sizeof(wait_state2)-6-16, dataW, wait_state2+sizeof(wait_state2)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state2+8));
-	
-	//exit(0);
 
 	printf("\nGet Version API REQ :\n");
 	BYTE *unciphered_get_version_api_req = cbc_decrypt(get_version_api_req+6, sizeof(get_version_api_req)-6-16, dataW, get_version_api_req+sizeof(get_version_api_req)-16);
@@ -549,26 +547,20 @@ int main(int argc, char* argv[]){
 	
 	printf("\nGet Version API RESP :\n");
 	BYTE *unciphered_get_version_api_resp = cbc_decrypt(get_version_api_resp+6, sizeof(get_version_api_resp)-6-16, dataW, get_version_api_resp+sizeof(get_version_api_resp)-16);
-
-
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_resp+8));
 	
-	uint32_t j = 0;
-	for(i=24; i<sizeof(get_version_api_resp)-6-16; i++){
-		j = j + unciphered_get_version_api_resp[i];
-	}
-	printf("Checksum test : 0000121e %08x\n", j);
+	printf("Read Virtual Memory API REQ\n");
+	BYTE *unciphered_read_virtual_memory_api_req = cbc_decrypt(read_virtual_memory_api_req+6, sizeof(read_virtual_memory_api_req)-6-16, dataW, read_virtual_memory_api_req+sizeof(read_virtual_memory_api_req)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_req+8));
 	
-	//exit(0);
+	//TODO: read_virtual_memory_api_req_ack
 
 	printf("Read Virtual Memory API RESP\n");
 	BYTE *unciphered_read_virtual_memory_api_resp = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8));
 	uint32_t tmp_checksum = checksumKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8), sizeof(read_virtual_memory_api_resp)-6-16);
 	printf("Checksum test : 00001ce3 %08x\n", tmp_checksum);
-	
-	exit(0);
-	
+		
 	printf("Get Register RESP\n");
 	BYTE* unciphered_get_register_resp = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_register_resp+8));
