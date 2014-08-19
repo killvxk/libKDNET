@@ -92,7 +92,7 @@ typedef struct _DBGKD_LOAD_SYMBOLS64
 typedef struct _KDNET_POST_HEADER{
 	uint8_t unknown[6];
 	uint8_t PacketNumber;
-	uint8_t unknown1;
+	uint8_t unknown1; //What is it ? sometimes 0x00 or 0x08 or 0x0b...
 } KDNET_POST_HEADER, *PKDNET_POST_HEADER;
 
 
@@ -219,7 +219,7 @@ typedef struct _DBGKD_MANIPULATE_STATE64
     USHORT ProcessorLevel;
     USHORT Processor;
     NTSTATUS ReturnStatus;
-    uint8_t unknown[4];//TODO: what is it ?
+    uint32_t Unknown;//TODO: what is it ?
     union
     {
         DBGKD_READ_MEMORY64 ReadMemory;
