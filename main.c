@@ -97,9 +97,9 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			printf("\n");
 		}
 	}
-	if(i%16!=15){
+	/*if(i%16!=15){
 		printf("\n");
-	}
+	}*/
 	
 	switch(pkt->ApiNumber){
 		case DbgKdExceptionStateChange:
@@ -152,6 +152,9 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			printf("Unknown1 %08x\n", tmp->u.ReadMemory.Unknown1);
 			printf("Unknown2 %08x\n", tmp->u.ReadMemory.Unknown2);
 			printf("Unknown3 %08x\n", tmp->u.ReadMemory.Unknown3);
+			printf("Unknown4 %08x\n", tmp->u.ReadMemory.Unknown4);
+			printf("Unknown5 %08x\n", tmp->u.ReadMemory.Unknown5);
+			printf("Unknown6 %08x\n", tmp->u.ReadMemory.Unknown6);
 			
 			/*for(i=0; i<8; i++){
 				printf("%02x ", tmp->u.ReadMemory.Data[i]);
@@ -357,6 +360,9 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_read_memory->Unknown1 = 0x00000058; //TODO: hu ?
 	tmp_read_memory->Unknown2 = 0x00000000; //TODO: hu ?
 	tmp_read_memory->Unknown3 = 0x0; //TODO: hu ?
+	tmp_read_memory->Unknown4 = 0x0; //TODO: hu ?
+	tmp_read_memory->Unknown5 = 0xeeb9d82b; //TODO: hu ?
+	tmp_read_memory->Unknown6 = 0x000007fe; //TODO: hu ?
 	
 	int i;
 	for(i=0; i<count; i++){
@@ -364,12 +370,12 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	}
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+40+count); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, roundup16(16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 	
 
 	printf("\n\n[!] Send Packet !\n");
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+40+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 };
 
 void handleKD_PACKET(KD_PACKET_HEADER* pkt){
@@ -394,11 +400,11 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 		if(pkt->PacketType == 0x0002){ //ApiRequest
 			switch(pkt->ApiNumber){
 				case DbgKdGetVersionApi:
-					printf("DbgKdGetVersionApi\n");
+					//printf("DbgKdGetVersionApi\n");
 					GetVersionApiCallBack();
 					return;
 				case DbgKdReadVirtualMemoryApi:
-					printf("DbgKdReadVirtualMemoryApi");
+					//printf("DbgKdReadVirtualMemoryApi");
 					AckPkt(pkt->PacketID);
 					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
 					readMemoryCallBack(tmp->u.ReadMemory.TargetBaseAddress, tmp->u.ReadMemory.TransferCount);
@@ -607,6 +613,9 @@ int main(int argc, char* argv[]){
 	BYTE *unciphered_read_virtual_memory_api_resp = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8));
 	
+	uint32_t tmp_checksum = checksumKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8), sizeof(read_virtual_memory_api_resp)-6-16);
+	printf("Checksum test : 00001ce3 %08x\n", tmp_checksum);
+	
 	printf("\n[!] Read Virtual Memory API RESP ACK\n");
 	BYTE *unciphered_read_virtual_memory_api_resp_ack = cbc_decrypt(read_virtual_memory_api_resp_ack+6, sizeof(read_virtual_memory_api_resp_ack)-6-16, dataW, read_virtual_memory_api_resp_ack+sizeof(read_virtual_memory_api_resp_ack)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp_ack+8));
@@ -617,8 +626,7 @@ int main(int argc, char* argv[]){
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_next+8));
 	exit(0);
 
-	uint32_t tmp_checksum = checksumKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8), sizeof(read_virtual_memory_api_resp)-6-16);
-	printf("Checksum test : 00001ce3 %08x\n", tmp_checksum);
+
 		
 	printf("Get Register RESP\n");
 	BYTE* unciphered_get_register_resp = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);

@@ -187,6 +187,9 @@ typedef struct _DBGKD_READ_MEMORY64
     uint32_t Unknown1;
     uint32_t Unknown2;
     uint32_t Unknown3;
+    uint32_t Unknown4;
+    uint32_t Unknown5;
+    uint32_t Unknown6;
     uint8_t Data[1];
 } DBGKD_READ_MEMORY64, *PDBGKD_READ_MEMORY64;
 
