@@ -66,10 +66,10 @@ BYTE* cbc_encrypt(BYTE* clear, int clear_len, WORD* w, BYTE* iv){
 		}
 		aes_encrypt(current_clear_block, current_ciphered_block, w, 256);
 		memcpy(last_ciphered_block, current_ciphered_block, 16);
-		for(j=0; j<16; j++){
+		/*for(j=0; j<16; j++){
 			printf("%02x ", current_ciphered_block[j]);
 		}
-		printf("\n");
+		printf("\n");*/
 		memcpy(ciphered+(i*16), current_ciphered_block, 16);
 	}
 	return ciphered;

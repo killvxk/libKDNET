@@ -51,6 +51,10 @@ off_t fileSize(int fd){
 }
 
 
+inline int roundup16(int value){
+ return (value + 15) & ~15;
+}
+
 
 uint32_t checksumKD_PACKET(KD_PACKET_HEADER* pkt, uint16_t pkt_size){
 	uint8_t* tmp = (uint8_t*)pkt;
@@ -136,9 +140,18 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 		case DbgKdReadVirtualMemoryApi:
 		{
 			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+	
+			printf("ApiNumber %08x\n", tmp->ApiNumber);
+			printf("ProcessorLevel %04x\n", tmp->ProcessorLevel);
+			printf("Processor %04x\n", tmp->Processor);
+			printf("ReturnStatus %08x\n", tmp->ReturnStatus);
+			printf("Unknown %08x\n", tmp->Unknown);
 			printf("TargetBaseAddress %016lx\n", tmp->u.ReadMemory.TargetBaseAddress);
 			printf("TransferCount %08x\n", tmp->u.ReadMemory.TransferCount);
 			printf("ActualBytesRead %08x\n", tmp->u.ReadMemory.ActualBytesRead);
+			printf("Unknown1 %08x\n", tmp->u.ReadMemory.Unknown1);
+			printf("Unknown2 %08x\n", tmp->u.ReadMemory.Unknown2);
+			printf("Unknown3 %08x\n", tmp->u.ReadMemory.Unknown3);
 			
 			/*for(i=0; i<8; i++){
 				printf("%02x ", tmp->u.ReadMemory.Data[i]);
@@ -194,6 +207,7 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 
 //TODO: NO COPY !
 void sendDataPkt(uint8_t *data, int dataLen){
+	//printf("\n\n[!] sendDataPkt\n");
 	//Replace pkt number...
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)data;
 	tmp->PacketNumber = pkt_number++;
@@ -207,15 +221,16 @@ void sendDataPkt(uint8_t *data, int dataLen){
 	for(i=0; i<dataLen; i++){
 		finalPkt.CipheredData[i] = data[i];
 	}
+	
 	//Compute checksum whith hmachKey
 	uint8_t tmpHMACSHA256[32];
 	hmachSHA256((uint8_t*)&finalPkt, dataLen+6, hmacKey, tmpHMACSHA256);
 #if DEBUG
-	printf("\nChecksum:\n");
+	/*printf("\nChecksum:\n");
 	for(i=0; i<16; i++){
 		printf("%02x ", tmpHMACSHA256[i]);
 	}
-	printf("\n\n");
+	printf("\n\n");*/
 #endif
 	//Ciphered with KEY:dataW IV:tmpHMACSHA256
 	uint8_t* tmpData = cbc_encrypt(data, dataLen, dataW, tmpHMACSHA256);
@@ -283,6 +298,30 @@ void GetVersionApiCallBack(){
 	sendDataPkt(get_version_resp, sizeof(get_version_resp));
 }
 
+void AckPkt(uint32_t pkt_id){
+	uint8_t pkt_ack[4096];//TODO: LOL !
+	memset(pkt_ack, 0, 4096);
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)pkt_ack;
+	tmp->unknown1 = 0x08; //TODO: Understand ! Type of response ???
+	
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)pkt_ack+sizeof(KDNET_POST_HEADER);
+	tmp_kdnet_pkt->Signature = 0x69696969;
+	tmp_kdnet_pkt->PacketType = 0x0004;
+	tmp_kdnet_pkt->Checksum = 0x00000000;
+	tmp_kdnet_pkt->DataSize = 0;
+	tmp_kdnet_pkt->PacketID = pkt_id;
+
+	/*int i;
+	for(i=0; i<32; i++){
+		printf("%02x ", pkt_ack[i+9]);
+		if(i%16 == 15){
+			printf("\n");
+		}
+	}
+	printKD_PACKET(tmp_kdnet_pkt);*/
+	
+	sendDataPkt(pkt_ack, roundup16(8+16));
+}
 
 void initCallBack(){
 	int fd =  open("/home/arfarf/git/samples/win8_dbg.raw", O_RDONLY);
@@ -294,6 +333,7 @@ void initCallBack(){
 
 void readMemoryCallBack(uint64_t base, uint32_t count){
 	uint8_t read_memory_resp[4096];//TODO: LOL !
+	memset(read_memory_resp, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
 	tmp->unknown1 = 0x0B; //TODO: Understand ! Type of response ???
 	
@@ -301,12 +341,12 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
 	tmp_kdnet_pkt->DataSize = 16+40+count; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = 0x0;
+	tmp_kdnet_pkt->PacketID = 0x00000930; //TODO: Dafuq ?
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdReadVirtualMemoryApi;
-	tmp_manipulate_state->ProcessorLevel = 0x0;
-	tmp_manipulate_state->Processor = 0x0;
+	tmp_manipulate_state->ProcessorLevel = 0x6166; //TODO: Hu ?
+	tmp_manipulate_state->Processor = 0x3833; //TODO: Hu ?
 	tmp_manipulate_state->ReturnStatus = 0x0;
 	tmp_manipulate_state->Unknown = 0x0;
 	
@@ -314,6 +354,9 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_read_memory->TargetBaseAddress = base;
 	tmp_read_memory->TransferCount = count;
 	tmp_read_memory->ActualBytesRead = count;
+	tmp_read_memory->Unknown1 = 0x00000058; //TODO: hu ?
+	tmp_read_memory->Unknown2 = 0x00000000; //TODO: hu ?
+	tmp_read_memory->Unknown3 = 0x0; //TODO: hu ?
 	
 	int i;
 	for(i=0; i<count; i++){
@@ -323,8 +366,10 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	//Compute checksum
 	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+40+count); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 	
-	sendDataPkt((uint8_t*)tmp, 8+16+16+40+count); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	
+
+	printf("\n\n[!] Send Packet !\n");
+	printKD_PACKET(tmp_kdnet_pkt);
+	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+40+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 };
 
 void handleKD_PACKET(KD_PACKET_HEADER* pkt){
@@ -354,6 +399,7 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 					return;
 				case DbgKdReadVirtualMemoryApi:
 					printf("DbgKdReadVirtualMemoryApi");
+					AckPkt(pkt->PacketID);
 					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
 					readMemoryCallBack(tmp->u.ReadMemory.TargetBaseAddress, tmp->u.ReadMemory.TransferCount);
 					return;
@@ -416,9 +462,9 @@ void kd_server(){
 	//Get next_packet !
 	while(1){
 		n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
-		printf("Packet received : %d bytes >>>>>>\n", n);
+		printf("\n\n[!] Packet received : %d bytes >>>>>>\n", n);
 		BYTE *unciphered_pkt = cbc_decrypt(buffer+6, n-6-16, dataW, buffer+n-16);
-		printf("\n<<<<\n");
+		printf("<<<<\n");
 
 		printKD_PACKET((KD_PACKET_HEADER*)(unciphered_pkt+8));
 		handleKD_PACKET((KD_PACKET_HEADER*)(unciphered_pkt+8));
@@ -521,43 +567,56 @@ int main(int argc, char* argv[]){
 	cbc_decrypt(poke_repeat+6, 0x160, controlW, poke_repeat+sizeof(poke_repeat)-16);
 	//...
 
-	printf("\nBreak :\n");
+	printf("\n[!] Break :\n");
 	BYTE *unciphered_break = cbc_decrypt(break_data+6, sizeof(break_data)-6-16, dataW, break_data+sizeof(break_data)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break+8));
 	
-	printf("\nWait State :\n");
+	printf("\n[!] Wait State :\n");
 	BYTE *unciphered_wait_state = cbc_decrypt(wait_state+6, sizeof(wait_state)-6-16, dataW, wait_state+sizeof(wait_state)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state+8));
 	
-	printf("\nReset:\n");
+	printf("\n[!] Reset:\n");
 	BYTE *unciphered_reset = cbc_decrypt(reset+6, sizeof(reset)-6-16, dataW, reset+sizeof(reset)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_reset+8));
 	
-	printf("\nReset ACK:\n");
+	printf("\n[!] Reset ACK:\n");
 	BYTE *unciphered_reset_ack = cbc_decrypt(reset_ack+6, sizeof(reset_ack)-6-16, dataW, reset_ack+sizeof(reset_ack)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_reset_ack+8));
 	
-	printf("\nWait State 2:\n");
+	printf("\n[!] Wait State 2:\n");
 	BYTE *unciphered_wait_state2 = cbc_decrypt(wait_state2+6, sizeof(wait_state2)-6-16, dataW, wait_state2+sizeof(wait_state2)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_wait_state2+8));
 
-	printf("\nGet Version API REQ :\n");
+	printf("\n[!] Get Version API REQ :\n");
 	BYTE *unciphered_get_version_api_req = cbc_decrypt(get_version_api_req+6, sizeof(get_version_api_req)-6-16, dataW, get_version_api_req+sizeof(get_version_api_req)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_req+8));
 	
-	printf("\nGet Version API RESP :\n");
+	printf("\n[!] Get Version API RESP :\n");
 	BYTE *unciphered_get_version_api_resp = cbc_decrypt(get_version_api_resp+6, sizeof(get_version_api_resp)-6-16, dataW, get_version_api_resp+sizeof(get_version_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_resp+8));
 	
-	printf("Read Virtual Memory API REQ\n");
+	printf("\n[!] Read Virtual Memory API REQ\n");
 	BYTE *unciphered_read_virtual_memory_api_req = cbc_decrypt(read_virtual_memory_api_req+6, sizeof(read_virtual_memory_api_req)-6-16, dataW, read_virtual_memory_api_req+sizeof(read_virtual_memory_api_req)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_req+8));
 	
-	//TODO: read_virtual_memory_api_req_ack
+	printf("\n[!] Read Virtual Memory API REQ ACK\n");
+	BYTE *unciphered_read_virtual_memory_api_req_ack = cbc_decrypt(read_virtual_memory_api_req_ack+6, sizeof(read_virtual_memory_api_req_ack)-6-16, dataW, read_virtual_memory_api_req_ack+sizeof(read_virtual_memory_api_req_ack)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_req_ack+8));
 
-	printf("Read Virtual Memory API RESP\n");
+	printf("\n[!] Read Virtual Memory API RESP\n");
 	BYTE *unciphered_read_virtual_memory_api_resp = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8));
+	
+	printf("\n[!] Read Virtual Memory API RESP ACK\n");
+	BYTE *unciphered_read_virtual_memory_api_resp_ack = cbc_decrypt(read_virtual_memory_api_resp_ack+6, sizeof(read_virtual_memory_api_resp_ack)-6-16, dataW, read_virtual_memory_api_resp_ack+sizeof(read_virtual_memory_api_resp_ack)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp_ack+8));
+	exit(0);
+	
+	printf("\n[!] Next\n");
+	BYTE *unciphered_next = cbc_decrypt(next+6, sizeof(next)-6-16, dataW, next+sizeof(next)-16);
+	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_next+8));
+	exit(0);
+
 	uint32_t tmp_checksum = checksumKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8), sizeof(read_virtual_memory_api_resp)-6-16);
 	printf("Checksum test : 00001ce3 %08x\n", tmp_checksum);
 		

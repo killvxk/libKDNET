@@ -184,7 +184,9 @@ typedef struct _DBGKD_READ_MEMORY64
     ULONG64 TargetBaseAddress;
     ULONG TransferCount;
     ULONG ActualBytesRead;
-    uint8_t unknown[24];
+    uint32_t Unknown1;
+    uint32_t Unknown2;
+    uint32_t Unknown3;
     uint8_t Data[1];
 } DBGKD_READ_MEMORY64, *PDBGKD_READ_MEMORY64;
 
