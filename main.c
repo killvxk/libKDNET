@@ -18,6 +18,8 @@
 #include "aes.h"
 #include "cbc_aes.h"
 #include "kd.h"
+#include "util.h"
+#include "mmu.h"
 
 #include "test_pkt.h"
 
@@ -44,12 +46,9 @@ int pkt_number = 0;
 //Fake debugger
 uint8_t* raw_mem;
 off_t raw_mem_size;
+uint64_t cr3 =  0x00000000001a7000;
 
 //TODO: util.c
-off_t fileSize(int fd){
-	return lseek(fd, 0, SEEK_END);
-}
-
 void printHexData(uint8_t *tmp, int len){
 	int i;
 	for(i=0; i<len; i++){
@@ -67,6 +66,18 @@ inline int roundup16(int value){
  return (value + 15) & ~15;
 }
 
+
+int readVirtualMemory(uint64_t virtualAddr, uint32_t count, uint8_t* data){
+	uint64_t tmp = virtual_physical(virtualAddr, cr3, raw_mem, raw_mem_size);
+	if(tmp > 0){
+		int i;
+		for(i=0; i<count; i++){
+			data[i] = raw_mem[tmp+i];
+		}
+		return 0;
+	}
+	return -1;
+}
 
 uint32_t checksumKD_PACKET(KD_PACKET_HEADER* pkt, uint16_t pkt_size){
 	uint8_t* tmp = (uint8_t*)pkt;
@@ -208,6 +219,8 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 		default:
 		{
 			printf("Unknown packet\n");
+			printf("FATAL !\n");
+			exit(0);
 			break;
 		}
 	}
@@ -343,6 +356,9 @@ void AckPkt(uint32_t pkt_id){
 }
 
 void initCallBack(){
+	//DirectoryTableBase 0x00000000001a7000
+	//fffff8026bef91f0
+
 	int fd =  open("/home/arfarf/git/samples/win8_dbg.raw", O_RDONLY);
 	raw_mem_size = fileSize(fd);
 	printf("raw_mem_size %ld MB \n", raw_mem_size/(1024*1024));
@@ -351,7 +367,7 @@ void initCallBack(){
 }
 
 
-
+uint32_t tmpID = 0x0000092a;
 void readMemoryCallBack(uint64_t base, uint32_t count){
 	uint8_t read_memory_resp[4096];//TODO: LOL !
 	memset(read_memory_resp, 0, 4096);
@@ -362,12 +378,18 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
 	tmp_kdnet_pkt->DataSize = 16+40+count; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = 0x0000092a; //TODO: Dafuq ?
+	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmpID++;
+	tmpID++;
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdReadVirtualMemoryApi;
 	tmp_manipulate_state->ProcessorLevel = 0x0000; //TODO: Hu ?
 	tmp_manipulate_state->Processor = 0x0000; //TODO: Hu ?
+	if(base == 0xfffff8026bc19c10){
+		tmp_manipulate_state->ProcessorLevel = 0x6166; //TODO: Hu ?
+		tmp_manipulate_state->Processor = 0x3833; //TODO: Hu ?
+	}
 	tmp_manipulate_state->ReturnStatus = 0x0;
 	tmp_manipulate_state->Unknown = 0x0;
 	
@@ -381,18 +403,16 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_read_memory->Unknown4 = 0x0; //TODO: hu ?
 	tmp_read_memory->Unknown5 = 0xeeb9d82b; //TODO: hu ?
 	tmp_read_memory->Unknown6 = 0x000007fe; //TODO: hu ?
-	
-	//int i;
-	//for(i=0; i<count; i++){
-	tmp_read_memory->Data[0] = 0x20;
-	tmp_read_memory->Data[1] = 0xfa;
-	tmp_read_memory->Data[2] = 0xea;
-	tmp_read_memory->Data[3] = 0x6b;
-	tmp_read_memory->Data[4] = 0x02;
-	tmp_read_memory->Data[5] = 0xf8;
-	tmp_read_memory->Data[6] = 0xff;
-	tmp_read_memory->Data[7] = 0xff;
-	//}
+	if(base == 0xfffff8026bc19c10){
+		tmp_read_memory->Unknown1 = 0x00000004; //TODO: hu ?
+		tmp_read_memory->Unknown2 = 0x00000000; //TODO: hu ?
+		tmp_read_memory->Unknown3 = 0x6b40106a; //TODO: hu ?
+		tmp_read_memory->Unknown4 = 0x00005f33; //TODO: hu ?
+		tmp_read_memory->Unknown5 = 0x004acad0; //TODO: hu ?
+		tmp_read_memory->Unknown6 = 0x00000000; //TODO: hu ?
+	}
+	//TODO: callback !
+	readVirtualMemory(base, count, tmp_read_memory->Data);
 	
 	//Compute checksum
 	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
@@ -588,6 +608,7 @@ int main(int argc, char* argv[]){
 	}
 	printf("\n");
 	
+	
 	printf("\nConnection Check :\n");
 	cbc_decrypt(conncheck+6, sizeof(conncheck)-6-16, dataW, conncheck+sizeof(conncheck)-16);
 	
@@ -638,7 +659,7 @@ int main(int argc, char* argv[]){
 	printf("\n[!] Read Virtual Memory API RESP\n");
 	BYTE *unciphered_read_virtual_memory_api_resp = cbc_decrypt(read_virtual_memory_api_resp+6, sizeof(read_virtual_memory_api_resp)-6-16, dataW, read_virtual_memory_api_resp+sizeof(read_virtual_memory_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8));
-	
+
 	uint32_t tmp_checksum = checksumKD_PACKET((KD_PACKET_HEADER*)(unciphered_read_virtual_memory_api_resp+8), sizeof(read_virtual_memory_api_resp)-6-16);
 	printf("Checksum test : 00001ce3 %08x\n", tmp_checksum);
 	
@@ -649,9 +670,6 @@ int main(int argc, char* argv[]){
 	printf("\n[!] Next\n");
 	BYTE *unciphered_next = cbc_decrypt(next+6, sizeof(next)-6-16, dataW, next+sizeof(next)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_next+8));
-	exit(0);
-
-
 		
 	printf("Get Register RESP\n");
 	BYTE* unciphered_get_register_resp = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);
