@@ -92,7 +92,7 @@ typedef struct _DBGKD_LOAD_SYMBOLS64
 typedef struct _KDNET_POST_HEADER{
 	uint8_t unknown[6];
 	uint8_t PacketNumber;
-	uint8_t unknown1; //What is it ? sometimes 0x00 or 0x08 or 0x0b...
+	uint8_t PacketPadding;
 } KDNET_POST_HEADER, *PKDNET_POST_HEADER;
 
 

@@ -240,35 +240,6 @@ void sendDataPkt(uint8_t *data, int dataLen){
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)data;
 	tmp->PacketNumber = pkt_number++;
 	
-	if(tmp->PacketNumber == 0x0D){ //Why ... Did I missed something ???????
-		tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x0B;
-	}
-	if(tmp->PacketNumber == 0x10){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}
-	if(tmp->PacketNumber == 0x14){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}
-	if(tmp->PacketNumber == 0x16){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}
-	/*if(tmp->PacketNumber == 0x18){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}
-	if(tmp->PacketNumber == 0x1A){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}
-	if(tmp->PacketNumber == 0x1E){ //Why ... Did I missed something ???????
-		//tmp->PacketNumber = pkt_number++;
-		tmp->unknown1 = 0x00;
-	}*/
-	
 	int i;
 	//Add header
 	KDNET_PACKET_HEADER finalPkt; //TODO: no static !
@@ -363,7 +334,7 @@ void AckPkt(uint32_t pkt_id){
 	uint8_t pkt_ack[4096];
 	memset(pkt_ack, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)pkt_ack;
-	tmp->unknown1 = 0x08; //TODO: Understand ! Type of response ???
+	tmp->PacketPadding = 0x08; //TODO: Understand ! Type of response ???
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)pkt_ack+sizeof(KDNET_POST_HEADER);
 	tmp_kdnet_pkt->Signature = 0x69696969;
@@ -396,24 +367,7 @@ void readMemoryCallBack(DBGKD_READ_MEMORY64* request){
 	uint8_t read_memory_resp[4096];//TODO: LOL !
 	memset(read_memory_resp, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
-	tmp->unknown1 = 0x08; //TODO: Understand ! Type of response ???
-	/*if(base == 0xfffff8026bc19c10){
-		tmp->unknown1 = 0x0b;
-	}*/
-	if(base == 0xfffff8026bc18180
-	|| base == 0xfffff8026bc18000
-	|| base == 0xfffff8026bc18100
-	|| base == 0xfffff8026bc18200
-	|| base == 0xfffff8026bc18280
-	|| base == 0xfffff8026c2b300c){
-		tmp->unknown1 = 0x00;
-	}
-	if(base == 0xfffff8026c2b8f84){
-		tmp->unknown1 = 0x04;
-	}
-	if(base == 0xfffff8026c2b9000){
-		tmp->unknown1 = 0x0C;
-	}
+	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(read_memory_resp+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
@@ -714,4 +668,3 @@ int main(int argc, char* argv[]){
 	//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_break_ack+8));
 	return 0;
 }
-
