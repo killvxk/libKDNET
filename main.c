@@ -235,10 +235,39 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 
 //TODO: NO COPY !
 void sendDataPkt(uint8_t *data, int dataLen){
-	//printf("\n\n[!] sendDataPkt\n");
+	printf("[!] sendDataPkt %d\n", pkt_number);
 	//Replace pkt number...
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)data;
 	tmp->PacketNumber = pkt_number++;
+	
+	if(tmp->PacketNumber == 0x0D){ //Why ... Did I missed something ???????
+		tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x0B;
+	}
+	if(tmp->PacketNumber == 0x10){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}
+	if(tmp->PacketNumber == 0x14){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}
+	if(tmp->PacketNumber == 0x16){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}
+	/*if(tmp->PacketNumber == 0x18){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}
+	if(tmp->PacketNumber == 0x1A){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}
+	if(tmp->PacketNumber == 0x1E){ //Why ... Did I missed something ???????
+		//tmp->PacketNumber = pkt_number++;
+		tmp->unknown1 = 0x00;
+	}*/
 	
 	int i;
 	//Add header
@@ -275,7 +304,7 @@ void sendDataPkt(uint8_t *data, int dataLen){
 		finalPkt.CipheredData[dataLen+i] = tmpHMACSHA256[i];
 	}
 	//Send on socket !
-	sendto(socket_fd, &finalPkt, dataLen+6+16, 0, (struct sockaddr *)&sa,sizeof(sa));
+	sendto(socket_fd, &finalPkt, dataLen+6+16, MSG_DONTWAIT, (struct sockaddr *)&sa,sizeof(sa));
 }
 
 /*
@@ -331,7 +360,7 @@ void GetVersionApiCallBack(){
 }
 
 void AckPkt(uint32_t pkt_id){
-	uint8_t pkt_ack[4096];//TODO: LOL !
+	uint8_t pkt_ack[4096];
 	memset(pkt_ack, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)pkt_ack;
 	tmp->unknown1 = 0x08; //TODO: Understand ! Type of response ???
@@ -342,16 +371,8 @@ void AckPkt(uint32_t pkt_id){
 	tmp_kdnet_pkt->Checksum = 0x00000000;
 	tmp_kdnet_pkt->DataSize = 0;
 	tmp_kdnet_pkt->PacketID = pkt_id;
-
-	/*int i;
-	for(i=0; i<32; i++){
-		printf("%02x ", pkt_ack[i+9]);
-		if(i%16 == 15){
-			printf("\n");
-		}
-	}
-	printKD_PACKET(tmp_kdnet_pkt);*/
 	
+	printf("\n\n[!] Send ACK Packet for %08x!\n", pkt_id);
 	sendDataPkt(pkt_ack, roundup16(8+16));
 }
 
@@ -368,12 +389,31 @@ void initCallBack(){
 
 
 uint32_t tmpID = 0x0000092a;
-void readMemoryCallBack(uint64_t base, uint32_t count){
+void readMemoryCallBack(DBGKD_READ_MEMORY64* request){
+	uint64_t base = request->TargetBaseAddress;
+	uint32_t count = request->TransferCount;
+	
 	uint8_t read_memory_resp[4096];//TODO: LOL !
 	memset(read_memory_resp, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
 	tmp->unknown1 = 0x08; //TODO: Understand ! Type of response ???
-	
+	/*if(base == 0xfffff8026bc19c10){
+		tmp->unknown1 = 0x0b;
+	}*/
+	if(base == 0xfffff8026bc18180
+	|| base == 0xfffff8026bc18000
+	|| base == 0xfffff8026bc18100
+	|| base == 0xfffff8026bc18200
+	|| base == 0xfffff8026bc18280
+	|| base == 0xfffff8026c2b300c){
+		tmp->unknown1 = 0x00;
+	}
+	if(base == 0xfffff8026c2b8f84){
+		tmp->unknown1 = 0x04;
+	}
+	if(base == 0xfffff8026c2b9000){
+		tmp->unknown1 = 0x0C;
+	}
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(read_memory_resp+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
@@ -397,20 +437,12 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	tmp_read_memory->TargetBaseAddress = base;
 	tmp_read_memory->TransferCount = count;
 	tmp_read_memory->ActualBytesRead = count;
-	tmp_read_memory->Unknown1 = 0x00000058; //TODO: hu ?
-	tmp_read_memory->Unknown2 = 0x00000000; //TODO: hu ?
-	tmp_read_memory->Unknown3 = 0x0; //TODO: hu ?
-	tmp_read_memory->Unknown4 = 0x0; //TODO: hu ?
-	tmp_read_memory->Unknown5 = 0xeeb9d82b; //TODO: hu ?
-	tmp_read_memory->Unknown6 = 0x000007fe; //TODO: hu ?
-	if(base == 0xfffff8026bc19c10){
-		tmp_read_memory->Unknown1 = 0x00000004; //TODO: hu ?
-		tmp_read_memory->Unknown2 = 0x00000000; //TODO: hu ?
-		tmp_read_memory->Unknown3 = 0x6b40106a; //TODO: hu ?
-		tmp_read_memory->Unknown4 = 0x00005f33; //TODO: hu ?
-		tmp_read_memory->Unknown5 = 0x004acad0; //TODO: hu ?
-		tmp_read_memory->Unknown6 = 0x00000000; //TODO: hu ?
-	}
+	tmp_read_memory->Unknown1 = request->Unknown1; //TODO: hu ?
+	tmp_read_memory->Unknown2 = request->Unknown2; //TODO: hu ?
+	tmp_read_memory->Unknown3 = request->Unknown3; //TODO: hu ?
+	tmp_read_memory->Unknown4 = request->Unknown4; //TODO: hu ?
+	tmp_read_memory->Unknown5 = request->Unknown5; //TODO: hu ?
+	tmp_read_memory->Unknown6 = request->Unknown6; //TODO: hu ?
 	//TODO: callback !
 	readVirtualMemory(base, count, tmp_read_memory->Data);
 	
@@ -422,7 +454,8 @@ void readMemoryCallBack(uint64_t base, uint32_t count){
 	printHexData((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count));
 	printKD_PACKET(tmp_kdnet_pkt);
 	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-};
+
+}
 
 void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 	if(pkt->Signature == 0x00000062){
@@ -453,7 +486,7 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 					//printf("DbgKdReadVirtualMemoryApi");
 					AckPkt(pkt->PacketID);
 					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
-					readMemoryCallBack(tmp->u.ReadMemory.TargetBaseAddress, tmp->u.ReadMemory.TransferCount);
+					readMemoryCallBack(&tmp->u.ReadMemory);
 					return;
 				default:
 					printf("Unknown ApiNumber %08x\n", pkt->ApiNumber);
@@ -670,6 +703,8 @@ int main(int argc, char* argv[]){
 	printf("\n[!] Next\n");
 	BYTE *unciphered_next = cbc_decrypt(next+6, sizeof(next)-6-16, dataW, next+sizeof(next)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_next+8));
+	
+	exit(0);
 		
 	printf("Get Register RESP\n");
 	BYTE* unciphered_get_register_resp = cbc_decrypt(get_register_resp+6, sizeof(get_register_resp)-6-16, dataW, get_register_resp+sizeof(get_register_resp)-16);
