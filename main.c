@@ -344,9 +344,9 @@ void AckPkt(uint32_t pkt_id){
 	uint8_t pkt_ack[4096];
 	memset(pkt_ack, 0, 4096);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)pkt_ack;
-	tmp->PacketPadding = 0x08; //TODO: Understand ! Type of response ???
+	tmp->PacketPadding = 0x08; //TODO: Compute padding !
 	
-	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)pkt_ack+sizeof(KDNET_POST_HEADER);
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(pkt_ack+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x69696969;
 	tmp_kdnet_pkt->PacketType = 0x0004;
 	tmp_kdnet_pkt->Checksum = 0x00000000;
@@ -587,6 +587,8 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 				}
 				default:
 					printf("Unknown ApiNumber %08x\n", pkt->ApiNumber);
+					printf("FATAL\n");
+					exit(0);
 					return;
 			}
 		}
@@ -742,7 +744,7 @@ int main(int argc, char* argv[]){
 	
 	
 	
-	/*pcap_t *handle; 
+	pcap_t *handle; 
     char errbuf[PCAP_ERRBUF_SIZE]; //not sure what to do with this, oh well 
     handle = pcap_open_offline("/home/arfarf/git/samples/debug_trace.pcap", errbuf);   //call pcap library function 
     const u_char *packet; // The actual packet
@@ -759,7 +761,7 @@ int main(int argc, char* argv[]){
 			//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_debug_pkt+8));
 			//printf(".\n");
 			KD_PACKET_HEADER* tmp = (KD_PACKET_HEADER*)(unciphered_debug_pkt+8);
-			if(tmp->ApiNumber == DbgKdClearAllInternalBreakpointsApi){
+			if(pkt_num>568 && pkt_num<580){
 				printf("%d.\n", pkt_num);
 				printHexData(unciphered_debug_pkt, debug_pkt_len-6-16);
 				printKD_PACKET(tmp);
@@ -771,7 +773,7 @@ int main(int argc, char* argv[]){
 		pkt_num++;
 	}
 	
-	exit(0);*/
+	exit(0);
 	
 	printf("\nConnection Check :\n");
 	cbc_decrypt(conncheck+6, sizeof(conncheck)-6-16, dataW, conncheck+sizeof(conncheck)-16);
