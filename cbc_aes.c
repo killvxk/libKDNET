@@ -38,10 +38,10 @@ BYTE* cbc_decrypt(BYTE* ciphered, int ciphered_len, WORD* w, BYTE* iv){
 		}
 		memcpy(last_ciphered_block, current_ciphered_block, 16);
 		
-		for(j=0; j<16; j++){
+		/*for(j=0; j<16; j++){
 			printf("%02x ", current_clear_block[j]);
 		}
-		printf("\n");
+		printf("\n");*/
 		memcpy(clear+(i*16), current_clear_block, 16);
 	}
 	return clear;

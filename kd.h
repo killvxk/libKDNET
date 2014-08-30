@@ -90,8 +90,8 @@ typedef struct _DBGKD_LOAD_SYMBOLS64
 } DBGKD_LOAD_SYMBOLS64, *PDBGKD_LOAD_SYMBOLS64;
 
 typedef struct _KDNET_POST_HEADER{
-	uint8_t unknown[6];
-	uint8_t PacketNumber;
+	uint8_t unknown[3];
+	uint32_t PacketNumber;
 	uint8_t PacketPadding;
 } KDNET_POST_HEADER, *PKDNET_POST_HEADER;
 
@@ -218,22 +218,29 @@ typedef struct _DBGKD_GET_REGISTER64{
 	
 }DBGKD_GET_REGISTER64,*PBGKD_GET_REGISTER64;
 
+typedef struct _DBGKD_RESTORE_BREAKPOINT
+{
+    ULONG BreakPointHandle;
+    uint8_t Unknown[36];
+    
+} DBGKD_RESTORE_BREAKPOINT, *PDBGKD_RESTORE_BREAKPOINT;
+
 typedef struct _DBGKD_MANIPULATE_STATE64
 {
     ULONG ApiNumber;
     USHORT ProcessorLevel;
     USHORT Processor;
     NTSTATUS ReturnStatus;
-    uint32_t Unknown;//TODO: what is it ?
+    uint32_t Padding;
     union
     {
         DBGKD_READ_MEMORY64 ReadMemory;
         /*DBGKD_WRITE_MEMORY64 WriteMemory;
         DBGKD_GET_CONTEXT GetContext;
         DBGKD_SET_CONTEXT SetContext;
-        DBGKD_WRITE_BREAKPOINT64 WriteBreakPoint;
+        DBGKD_WRITE_BREAKPOINT64 WriteBreakPoint;*/
         DBGKD_RESTORE_BREAKPOINT RestoreBreakPoint;
-        DBGKD_CONTINUE Continue;
+        /*DBGKD_CONTINUE Continue;
         DBGKD_CONTINUE2 Continue2;
         DBGKD_READ_WRITE_IO64 ReadWriteIo;
         DBGKD_READ_WRITE_IO_EXTENDED64 ReadWriteIoExtended;
