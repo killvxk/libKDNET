@@ -73,7 +73,7 @@ DbgKdCommandStringStateChange = 0x00003032
 #define DbgKdQueryMemoryApi                 0x0000315C
 #define DbgKdSwitchPartition                0x0000315D
 #define DbgKdMaximumManipulate              0x0000315E
-//New in v
+//New in v8
 #define DbgKdGetRegister					0x0000315F
 
 
@@ -196,8 +196,8 @@ typedef struct _DBGKD_READ_MEMORY64
 #define NTSTATUS uint32_t
 
 typedef struct _DBGKD_GET_REGISTER64{
-	ULONG ApiNumber;
-	uint8_t unknown[172];
+	//ULONG ApiNumber;
+	uint8_t unknown[160];
 	ULONG64 rax;
 	ULONG64 rcx;
 	ULONG64 rdx;
@@ -215,6 +215,8 @@ typedef struct _DBGKD_GET_REGISTER64{
 	ULONG64 r14;
 	ULONG64 r15;
 	ULONG64 rip;
+	
+	uint64_t UnknownRegisters[122];
 	
 }DBGKD_GET_REGISTER64,*PBGKD_GET_REGISTER64;
 
@@ -256,6 +258,7 @@ typedef struct _DBGKD_MANIPULATE_STATE64
         DBGKD_FILL_MEMORY FillMemory;
         DBGKD_QUERY_MEMORY QueryMemory;
         DBGKD_SWITCH_PARTITION SwitchPartition;*/
+        DBGKD_GET_REGISTER64 GetRegisters;
     } u;
 } DBGKD_MANIPULATE_STATE64, *PDBGKD_MANIPULATE_STATE64;
 #pragma pack(pop)

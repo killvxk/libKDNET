@@ -177,29 +177,41 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			printf("Unknown5 %08x\n", tmp->u.ReadMemory.Unknown5);
 			printf("Unknown6 %08x\n", tmp->u.ReadMemory.Unknown6);
 			
-			/*for(i=0; i<8; i++){
-				printf("%02x ", tmp->u.ReadMemory.Data[i]);
-			}
-			printf("\n");*/
+			//printf("Data[]:\n");
+			//printHexData(tmp->u.ReadMemory.Data, 
 			break;
 		}
 		case DbgKdGetRegister:
 		{
-			DBGKD_GET_REGISTER64* tmp = (DBGKD_GET_REGISTER64*)&pkt->PacketBody[0];
-			printf("RAX %016lx\n", tmp->rax);
-			printf("RBX %016lx\n", tmp->rbx);
-			printf("RCX %016lx\n", tmp->rcx);
-			printf("RDX %016lx\n", tmp->rdx);
-			printf("RSP %016lx\n", tmp->rsp);
-			printf("RBP %016lx\n", tmp->rbp);
-			printf("R8 %016lx\n", tmp->r8);
-			printf("R9 %016lx\n", tmp->r9);
-			printf("R10 %016lx\n", tmp->r10);
-			printf("R11 %016lx\n", tmp->r11);
-			printf("R12 %016lx\n", tmp->r12);
-			printf("R13 %016lx\n", tmp->r13);
-			printf("R14 %016lx\n", tmp->r14);
-			printf("R15 %016lx\n", tmp->r15);
+			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+			printf("ApiNumber %08x\n", tmp->ApiNumber);
+			printf("ProcessorLevel %04x\n", tmp->ProcessorLevel);
+			printf("Processor %04x\n", tmp->Processor);
+			printf("ReturnStatus %08x\n", tmp->ReturnStatus);
+			
+			if(pkt->DataSize < 1288){
+				return;
+			}
+			
+			printf("RAX %016lx\n", tmp->u.GetRegisters.rax);
+			printf("RBX %016lx\n", tmp->u.GetRegisters.rbx);
+			printf("RCX %016lx\n", tmp->u.GetRegisters.rcx);
+			printf("RDX %016lx\n", tmp->u.GetRegisters.rdx);
+			printf("RSP %016lx\n", tmp->u.GetRegisters.rsp);
+			printf("RBP %016lx\n", tmp->u.GetRegisters.rbp);
+			printf("R8 %016lx\n", tmp->u.GetRegisters.r8);
+			printf("R9 %016lx\n", tmp->u.GetRegisters.r9);
+			printf("R10 %016lx\n", tmp->u.GetRegisters.r10);
+			printf("R11 %016lx\n", tmp->u.GetRegisters.r11);
+			printf("R12 %016lx\n", tmp->u.GetRegisters.r12);
+			printf("R13 %016lx\n", tmp->u.GetRegisters.r13);
+			printf("R14 %016lx\n", tmp->u.GetRegisters.r14);
+			printf("R15 %016lx\n", tmp->u.GetRegisters.r15);
+			
+			int i;
+			for(i=0; i<122; i++){
+				printf("UnknownRegisters[%d] %016lx\n", i, tmp->u.GetRegisters.UnknownRegisters[i]);
+			}
 			break;
 		}
 		case DbgKdGetVersionApi:
@@ -370,9 +382,9 @@ void initCallBack(){
 
 
 uint32_t tmpID = 0x0000092a;
-void readMemoryCallBack(DBGKD_READ_MEMORY64* request){
-	uint64_t base = request->TargetBaseAddress;
-	uint32_t count = request->TransferCount;
+void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
+	uint64_t base = request->u.ReadMemory.TargetBaseAddress;
+	uint32_t count = request->u.ReadMemory.TransferCount;
 	
 	uint8_t read_memory_resp[4096];//TODO: LOL !
 	memset(read_memory_resp, 0, 4096);
@@ -388,25 +400,21 @@ void readMemoryCallBack(DBGKD_READ_MEMORY64* request){
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdReadVirtualMemoryApi;
-	tmp_manipulate_state->ProcessorLevel = 0x0000; //TODO: Hu ?
-	tmp_manipulate_state->Processor = 0x0000; //TODO: Hu ?
-	if(base == 0xfffff8026bc19c10){
-		tmp_manipulate_state->ProcessorLevel = 0x6166; //TODO: Hu ?
-		tmp_manipulate_state->Processor = 0x3833; //TODO: Hu ?
-	}
+	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel;
+	tmp_manipulate_state->Processor = request->Processor;
 	tmp_manipulate_state->ReturnStatus = 0x0;
-	//tmp_manipulate_state->Unknown = 0x0;
+	tmp_manipulate_state->Padding = 0x0;
 	
 	DBGKD_READ_MEMORY64* tmp_read_memory = &tmp_manipulate_state->u.ReadMemory;
 	tmp_read_memory->TargetBaseAddress = base;
 	tmp_read_memory->TransferCount = count;
 	tmp_read_memory->ActualBytesRead = count;
-	tmp_read_memory->Unknown1 = request->Unknown1; //TODO: hu ?
-	tmp_read_memory->Unknown2 = request->Unknown2; //TODO: hu ?
-	tmp_read_memory->Unknown3 = request->Unknown3; //TODO: hu ?
-	tmp_read_memory->Unknown4 = request->Unknown4; //TODO: hu ?
-	tmp_read_memory->Unknown5 = request->Unknown5; //TODO: hu ?
-	tmp_read_memory->Unknown6 = request->Unknown6; //TODO: hu ?
+	tmp_read_memory->Unknown1 = request->u.ReadMemory.Unknown1; //TODO: hu ?
+	tmp_read_memory->Unknown2 = request->u.ReadMemory.Unknown2; //TODO: hu ?
+	tmp_read_memory->Unknown3 = request->u.ReadMemory.Unknown3; //TODO: hu ?
+	tmp_read_memory->Unknown4 = request->u.ReadMemory.Unknown4; //TODO: hu ?
+	tmp_read_memory->Unknown5 = request->u.ReadMemory.Unknown5; //TODO: hu ?
+	tmp_read_memory->Unknown6 = request->u.ReadMemory.Unknown6; //TODO: hu ?
 	//TODO: callback !
 	readVirtualMemory(base, count, tmp_read_memory->Data);
 	
@@ -468,8 +476,13 @@ void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
 		tmp_read_memory->Data[6] = 0xff;
 		tmp_read_memory->Data[7] = 0xff; //XXX: 0xfffff8026befe180 in my tests
 	}else if(base == 2){ //&KiProcessorBlock[State->Processor]->ProcessorState.SpecialRegisters;
-		printf("TODO !\n");
-		exit(0);
+		uint8_t mySpecialRegisters[] = {
+			0x00, 0x00, 0x00, 0x31, 0x00, 0x05, 0x80, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x6d, 0x40, 0x01, 0xf9, 0xff, 0xff, 0x00, 0x70, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x0f, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0x00, 0x00, 0x50, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x0f, 0x80, 0x50, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff, 0x40, 0x00, 0x00, 0x00, 0x80, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+		};
+		int i;
+		for(i=0; i<sizeof(mySpecialRegisters); i++){
+			tmp_read_memory->Data[i] = mySpecialRegisters[i];
+		}
 	}else{
 		printf("WTF !\n");
 		exit(0);
@@ -531,6 +544,46 @@ void clearAllInternalBreakpointsCallBack(){
 	//TODO: CallBack !
 }
 
+void getRegisterCallBack(){
+	uint8_t buffer[4096];//TODO: LOL !
+	memset(buffer, 0, 4096);
+	
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
+	tmp->PacketPadding = roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64))-(8+16+16+sizeof(DBGKD_GET_REGISTER64));
+	
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
+	tmp_kdnet_pkt->Signature = 0x30303030;
+	tmp_kdnet_pkt->PacketType = 0x0002;
+	tmp_kdnet_pkt->DataSize = 1288; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmpID++;
+	tmpID++;
+	
+	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
+	tmp_manipulate_state->ApiNumber = DbgKdGetRegister;
+	tmp_manipulate_state->ProcessorLevel = 0x0; //TODO: Hu ?
+	tmp_manipulate_state->Processor = 0x0; //TODO: Hu ?
+	tmp_manipulate_state->ReturnStatus = 0x0;
+	tmp_manipulate_state->Padding = 0x0;
+	
+	DBGKD_GET_REGISTER64* tmp_get_registers = &tmp_manipulate_state->u.GetRegisters;
+	tmp_get_registers->rax = 0x0123456789ABCDEF;
+	tmp_get_registers->rbx = 0x0123456789ABCDEF;
+	tmp_get_registers->rcx = 0x0123456789ABCDEF;
+	tmp_get_registers->rdx = 0x0123456789ABCDEF;
+	tmp_get_registers->r8 = 0x0123456789ABCDEF;
+	tmp_get_registers->r9 = 0x0123456789ABCDEF;
+	
+	//Compute checksum
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_GET_REGISTER64)); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	
+	printf("\n\n[!] Send Packet size %d!\n", roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64)));
+	printHexData((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64)));
+	printKD_PACKET(tmp_kdnet_pkt);
+	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64))); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+
+}
+
 void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 	if(pkt->Signature == 0x00000062){
 		printf("BREAKIN\n");
@@ -553,9 +606,11 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 		if(pkt->PacketType == 0x0002){ //ApiRequest
 			switch(pkt->ApiNumber){
 				case DbgKdGetVersionApi:
+				{
 					//printf("DbgKdGetVersionApi\n");
 					GetVersionApiCallBack();
 					return;
+				}
 				case DbgKdReadControlSpaceApi:
 				{
 					//printf("DbgKdReadControlSpaceApi");
@@ -569,7 +624,7 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 					//printf("DbgKdReadVirtualMemoryApi");
 					AckPkt(pkt->PacketID);
 					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
-					readMemoryCallBack(&tmp->u.ReadMemory);
+					readMemoryCallBack(tmp);
 					return;
 				}
 				case DbgKdRestoreBreakPointApi:
@@ -583,6 +638,12 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 				{
 					AckPkt(pkt->PacketID);
 					clearAllInternalBreakpointsCallBack();
+					return;
+				}
+				case DbgKdGetRegister:
+				{
+					AckPkt(pkt->PacketID);
+					getRegisterCallBack();
 					return;
 				}
 				default:
@@ -761,7 +822,7 @@ int main(int argc, char* argv[]){
 			//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_debug_pkt+8));
 			//printf(".\n");
 			KD_PACKET_HEADER* tmp = (KD_PACKET_HEADER*)(unciphered_debug_pkt+8);
-			if(pkt_num>568 && pkt_num<580){
+			if(tmp->ApiNumber == DbgKdReadControlSpaceApi){
 				printf("%d.\n", pkt_num);
 				printHexData(unciphered_debug_pkt, debug_pkt_len-6-16);
 				printKD_PACKET(tmp);
