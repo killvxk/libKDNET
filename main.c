@@ -216,10 +216,12 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 		}
 		case DbgKdGetVersionApi:
 		{
-			DBGKD_GET_VERSION_API64* tmp = (DBGKD_GET_VERSION_API64*)&pkt->PacketBody[4]; //TODO: [0]
-			printf("KernelImageBase %016lx\n", tmp->KernelImageBase);
-			printf("PsLoadedModuleList %016lx\n", tmp->PsLoadedModuleList);
-			printf("DebuggerDataList %016lx\n", tmp->DebuggerDataList);
+			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+			printf("Unknown1 0x%016lx\n", tmp->u.GetVersion.Unknown1);
+			printf("Unknown2 0x%016lx\n", tmp->u.GetVersion.Unknown2);
+			printf("KernelImageBase 0x%016lx\n", tmp->u.GetVersion.KernelImageBase);
+			printf("PsLoadedModuleList 0x%016lx\n", tmp->u.GetVersion.PsLoadedModuleList);
+			printf("DebuggerDataList 0x%016lx\n", tmp->u.GetVersion.DebuggerDataList);
 			break;
 		}
 		case DbgKdRestoreBreakPointApi:
@@ -241,8 +243,6 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 		default:
 		{
 			printf("Unknown packet\n");
-			//printf("FATAL !\n");
-			//exit(0);
 			break;
 		}
 	}
@@ -328,37 +328,74 @@ void breakCallBack(){
 
 
 
-
+uint32_t tmpID = 0x00000926;
 void resetCallBack(){
-	uint8_t reset_ack[] = {
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x08, 0x69, 0x69, 0x69, 0x69, 0x06, 0x00, 0x00, 0x00,
-		0x26, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-	};
-	sendDataPkt(reset_ack, sizeof(reset_ack));
+		
+	uint8_t buffer[4096];
+	memset(buffer, 0, 4096);
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
+	tmp->PacketPadding = 0x08; //TODO: Compute padding !
+	
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
+	tmp_kdnet_pkt->Signature = 0x69696969;
+	tmp_kdnet_pkt->PacketType = 0x0006;
+	tmp_kdnet_pkt->Checksum = 0x00000000;
+	tmp_kdnet_pkt->DataSize = 0;
+	tmp_kdnet_pkt->PacketID = tmpID;
+	tmpID++;
+	tmpID++;
+	
+	//printf("\n\n[!] Send ACK Packet for %08x!\n", pkt_id);
+	sendDataPkt(buffer, roundup16(8+16));
 	
 	//Always send wait_state after reset...
 	breakCallBack();
 }
 
-void GetVersionApiCallBack(){
-	uint8_t get_version_resp[] = {
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x30, 0x30, 0x30, 0x30, 0x02, 0x00, 0x38, 0x00,
-		0x28, 0x09, 0x00, 0x00, 0x1e, 0x12, 0x00, 0x00, 0x46, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x80, 0x25, 0x06, 0x02, 0x07, 0x00,
-		0x64, 0x86, 0x0c, 0x03, 0x31, 0x00, 0x00, 0x00, 0x00, 0x80, 0xc1, 0x6b, 0x02, 0xf8, 0xff, 0xff,
-		0xd0, 0x22, 0xee, 0x6b, 0x02, 0xf8, 0xff, 0xff, 0xf0, 0x91, 0xef, 0x6b, 0x02, 0xf8, 0xff, 0xff
-	};
+void GetVersionApiCallBack(DBGKD_MANIPULATE_STATE64* request){
+	uint8_t buffer[4096]; //TODO: LOL !
+	memset(buffer, 0, 4096);
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
+	tmp->PacketPadding = 0x00; //TODO: compute !
 	
-	sendDataPkt(get_version_resp, sizeof(get_version_resp));
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
+	tmp_kdnet_pkt->Signature = 0x30303030;
+	tmp_kdnet_pkt->PacketType = 0x0002;
+	tmp_kdnet_pkt->DataSize = 0x38; // TODO: compute !
+	tmp_kdnet_pkt->PacketID = tmpID;
+	tmpID++;
+	tmpID++;
+	
+	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
+	tmp_manipulate_state->ApiNumber = DbgKdGetVersionApi;
+	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel;
+	tmp_manipulate_state->Processor = request->Processor;
+	tmp_manipulate_state->ReturnStatus = 0x0;
+	tmp_manipulate_state->Padding = 0x0;
+	
+	DBGKD_GET_VERSION_API64* tmp_get_version = &tmp_manipulate_state->u.GetVersion;
+	tmp_get_version->Unknown1 = 0x000702062580000f;
+	tmp_get_version->Unknown2 = 0x00000031030c8664;
+	tmp_get_version->KernelImageBase = 0xfffff8026bc18000;
+	tmp_get_version->PsLoadedModuleList = 0xfffff8026bee22d0;
+	tmp_get_version->DebuggerDataList = 0xfffff8026bef91f0;
+	
+	//Compute checksum
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_GET_VERSION_API64));
+
+	printf("\n\n[!] Send Packet !\n");
+	printHexData(buffer, roundup16(8+16+16+sizeof(DBGKD_GET_VERSION_API64)));
+	printKD_PACKET(tmp_kdnet_pkt);
+	sendDataPkt(buffer, roundup16(8+16+16+sizeof(DBGKD_GET_VERSION_API64)));
 }
 
 void AckPkt(uint32_t pkt_id){
-	uint8_t pkt_ack[4096];
-	memset(pkt_ack, 0, 4096);
-	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)pkt_ack;
+	uint8_t buffer[4096];
+	memset(buffer, 0, 4096);
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = 0x08; //TODO: Compute padding !
 	
-	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(pkt_ack+sizeof(KDNET_POST_HEADER));
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x69696969;
 	tmp_kdnet_pkt->PacketType = 0x0004;
 	tmp_kdnet_pkt->Checksum = 0x00000000;
@@ -366,31 +403,31 @@ void AckPkt(uint32_t pkt_id){
 	tmp_kdnet_pkt->PacketID = pkt_id;
 	
 	printf("\n\n[!] Send ACK Packet for %08x!\n", pkt_id);
-	sendDataPkt(pkt_ack, roundup16(8+16));
+	sendDataPkt(buffer, roundup16(8+16));
 }
 
 void initCallBack(){
-	//DirectoryTableBase 0x00000000001a7000
-	//fffff8026bef91f0
-
 	int fd =  open("/home/arfarf/git/samples/win8_dbg.raw", O_RDONLY);
 	raw_mem_size = fileSize(fd);
 	printf("raw_mem_size %ld MB \n", raw_mem_size/(1024*1024));
 	
 	raw_mem = mmap(0, raw_mem_size, PROT_READ, MAP_SHARED, fd, 0);
+	
+	/*uint8_t data;
+	readVirtualMemory(0x7fef069d50c, 1, &data);
+	exit(0);*/
 }
 
 
-uint32_t tmpID = 0x0000092a;
 void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	uint64_t base = request->u.ReadMemory.TargetBaseAddress;
 	uint32_t count = request->u.ReadMemory.TransferCount;
 	
-	uint8_t read_memory_resp[4096];//TODO: LOL !
-	memset(read_memory_resp, 0, 4096);
-	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
+	uint8_t buffer[4096];//TODO: LOL !
+	memset(buffer, 0, 4096);
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
-	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(read_memory_resp+sizeof(KDNET_POST_HEADER));
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
 	tmp_kdnet_pkt->DataSize = 16+40+count; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
@@ -415,6 +452,7 @@ void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	tmp_read_memory->Unknown4 = request->u.ReadMemory.Unknown4; //TODO: hu ?
 	tmp_read_memory->Unknown5 = request->u.ReadMemory.Unknown5; //TODO: hu ?
 	tmp_read_memory->Unknown6 = request->u.ReadMemory.Unknown6; //TODO: hu ?
+	
 	//TODO: callback !
 	readVirtualMemory(base, count, tmp_read_memory->Data);
 	
@@ -423,9 +461,9 @@ void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	
 
 	printf("\n\n[!] Send Packet !\n");
-	printHexData((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count));
+	printHexData(buffer, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	sendDataPkt(buffer, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 
 }
 
@@ -475,7 +513,7 @@ void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
 		tmp_read_memory->Data[5] = 0xf8;
 		tmp_read_memory->Data[6] = 0xff;
 		tmp_read_memory->Data[7] = 0xff; //XXX: 0xfffff8026befe180 in my tests
-	}else if(base == 2){ //&KiProcessorBlock[State->Processor]->ProcessorState.SpecialRegisters;
+	}else if(base == 2){ //TODO: &KiProcessorBlock[State->Processor]->ProcessorState.SpecialRegisters;
 		uint8_t mySpecialRegisters[] = {
 			0x00, 0x00, 0x00, 0x31, 0x00, 0x05, 0x80, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x6d, 0x40, 0x01, 0xf9, 0xff, 0xff, 0x00, 0x70, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x0f, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x7f, 0x00, 0x00, 0x50, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x0f, 0x80, 0x50, 0x6e, 0x6d, 0x02, 0xf8, 0xff, 0xff, 0x40, 0x00, 0x00, 0x00, 0x80, 0x1f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 		};
@@ -573,6 +611,12 @@ void getRegisterCallBack(){
 	tmp_get_registers->rdx = 0x0123456789ABCDEF;
 	tmp_get_registers->r8 = 0x0123456789ABCDEF;
 	tmp_get_registers->r9 = 0x0123456789ABCDEF;
+	tmp_get_registers->rip = 0x0123456789ABCDEF;
+	
+	int i;
+	for(i=0; i<122; i++){
+		tmp_get_registers->UnknownRegisters[i] = 0x0123456789ABCDEF;
+	}
 	
 	//Compute checksum
 	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_GET_REGISTER64)); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
@@ -608,7 +652,8 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 				case DbgKdGetVersionApi:
 				{
 					//printf("DbgKdGetVersionApi\n");
-					GetVersionApiCallBack();
+					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+					GetVersionApiCallBack(tmp);
 					return;
 				}
 				case DbgKdReadControlSpaceApi:
@@ -802,9 +847,6 @@ int main(int argc, char* argv[]){
 	}
 	printf("\n");
 	
-	
-	
-	
 	pcap_t *handle; 
     char errbuf[PCAP_ERRBUF_SIZE]; //not sure what to do with this, oh well 
     handle = pcap_open_offline("/home/arfarf/git/samples/debug_trace.pcap", errbuf);   //call pcap library function 
@@ -815,25 +857,20 @@ int main(int argc, char* argv[]){
 		u_char *debug_pkt = (u_char *)packet+42; //cast a pointer to the packet data
 		int debug_pkt_len = header.caplen-42;
 		
-		//printf("%c%c%c%c\n", debug_pkt[0], debug_pkt[1], debug_pkt[2], debug_pkt[3]);
 		
 		if(debug_pkt[5] == 0){//Only Data Packet
 			BYTE *unciphered_debug_pkt = cbc_decrypt(debug_pkt+6, debug_pkt_len-6-16, dataW, debug_pkt+debug_pkt_len-16);
-			//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_debug_pkt+8));
-			//printf(".\n");
 			KD_PACKET_HEADER* tmp = (KD_PACKET_HEADER*)(unciphered_debug_pkt+8);
-			if(tmp->ApiNumber == DbgKdReadControlSpaceApi){
+			if(tmp->ApiNumber == 0x3030){
 				printf("%d.\n", pkt_num);
 				printHexData(unciphered_debug_pkt, debug_pkt_len-6-16);
 				printKD_PACKET(tmp);
 				printf("\n");
-				//exit(0);
 			}
 		}
 		
 		pkt_num++;
 	}
-	
 	exit(0);
 	
 	printf("\nConnection Check :\n");
@@ -874,6 +911,8 @@ int main(int argc, char* argv[]){
 	printf("\n[!] Get Version API RESP :\n");
 	BYTE *unciphered_get_version_api_resp = cbc_decrypt(get_version_api_resp+6, sizeof(get_version_api_resp)-6-16, dataW, get_version_api_resp+sizeof(get_version_api_resp)-16);
 	printKD_PACKET((KD_PACKET_HEADER*)(unciphered_get_version_api_resp+8));
+	
+	exit(0);
 	
 	printf("\n[!] Read Virtual Memory API REQ\n");
 	BYTE *unciphered_read_virtual_memory_api_req = cbc_decrypt(read_virtual_memory_api_req+6, sizeof(read_virtual_memory_api_req)-6-16, dataW, read_virtual_memory_api_req+sizeof(read_virtual_memory_api_req)-16);

@@ -95,12 +95,14 @@ uint64_t virtual_physical(uint64_t virtual_addr, uint64_t PML4E_base, const unsi
 	uint64_t P_offset    =(virtual_addr & 0x0000000000000FFF);
 	
 	uint64_t PDPE_base = __builtin_bswap64(read64(PML4E_base+(PML4E_index*8), memory))&0x0000FFFFFFFFF000;
+	printf("PDPE_base %016lx\n", PDPE_base);
 	if(PDPE_base == 0
 	|| PDPE_base > memSize-PAGE_SIZE){
 		return 0;
 	}
 	
 	uint64_t PDE_base = __builtin_bswap64(read64(PDPE_base+(PDPE_index*8), memory))&0x0000FFFFFFFFF000;
+	printf("PDE_base %016lx\n", PDE_base);
 	if(PDE_base == 0
 	|| PDE_base > memSize-PAGE_SIZE){
 		return 0;
@@ -108,6 +110,7 @@ uint64_t virtual_physical(uint64_t virtual_addr, uint64_t PML4E_base, const unsi
 	
 	uint64_t tmp = __builtin_bswap64(read64(PDE_base+(PDE_index*8), memory));
 	uint64_t PTE_base = tmp&0x0000FFFFFFFFF000;
+	printf("PTE_base %016lx\n", PTE_base);
 	if(PTE_base == 0
 	|| PTE_base > memSize-PAGE_SIZE){
 		return 0;
@@ -118,6 +121,7 @@ uint64_t virtual_physical(uint64_t virtual_addr, uint64_t PML4E_base, const unsi
 	}
 	
 	uint64_t P_base = __builtin_bswap64(read64(PTE_base+(PTE_index*8), memory))&0x0000FFFFFFFFF000;
+	printf("P_base %016lx\n", P_base);
 	if(P_base == 0
 	|| P_base > memSize-PAGE_SIZE){
 		return 0;

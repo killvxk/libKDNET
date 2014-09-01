@@ -172,7 +172,8 @@ typedef struct _DBGKD_WAIT_STATE_CHANGE64
 
 typedef struct _DBGKD_GET_VERSION_API64
 {
-	uint8_t unknown[28];
+	uint64_t Unknown1;
+	uint64_t Unknown2;
 	ULONG64 KernelImageBase;
 	ULONG64 PsLoadedModuleList;
 	ULONG64 DebuggerDataList;
@@ -259,6 +260,7 @@ typedef struct _DBGKD_MANIPULATE_STATE64
         DBGKD_QUERY_MEMORY QueryMemory;
         DBGKD_SWITCH_PARTITION SwitchPartition;*/
         DBGKD_GET_REGISTER64 GetRegisters;
+        DBGKD_GET_VERSION_API64 GetVersion;
     } u;
 } DBGKD_MANIPULATE_STATE64, *PDBGKD_MANIPULATE_STATE64;
 #pragma pack(pop)
