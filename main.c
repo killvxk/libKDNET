@@ -25,9 +25,8 @@
 #include "test_pkt.h"
 
 #define DEBUG 1
-
 #define SWAP32(x) x = (uint32_t)((x >> 24 & 0xff) | (x >> 8 & 0xff00) | (x << 8 & 0xff0000) | (x << 24 & 0xff000000))
-
+#define MAX_KDNET_PKTLEN 4096
 
 //TODO: key "1.1.1.1" is the only supported key...
 BYTE controlKey[32] = {
@@ -323,6 +322,8 @@ void breakCallBack(){
 		0xcc, 0xc3, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x10, 0x00, 0x2b, 0x00, 0x2b, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 	};
+	
+	//TODO: !
 	sendDataPkt(wait_state, sizeof(wait_state));
 }
 
@@ -331,8 +332,8 @@ void breakCallBack(){
 uint32_t tmpID = 0x00000926;
 void resetCallBack(){
 		
-	uint8_t buffer[4096];
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = 0x08; //TODO: Compute padding !
 	
@@ -353,8 +354,8 @@ void resetCallBack(){
 }
 
 void GetVersionApiCallBack(DBGKD_MANIPULATE_STATE64* request){
-	uint8_t buffer[4096]; //TODO: LOL !
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = 0x00; //TODO: compute !
 	
@@ -390,8 +391,8 @@ void GetVersionApiCallBack(DBGKD_MANIPULATE_STATE64* request){
 }
 
 void AckPkt(uint32_t pkt_id){
-	uint8_t buffer[4096];
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = 0x08; //TODO: Compute padding !
 	
@@ -423,8 +424,8 @@ void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	uint64_t base = request->u.ReadMemory.TargetBaseAddress;
 	uint32_t count = request->u.ReadMemory.TransferCount;
 	
-	uint8_t buffer[4096];//TODO: LOL !
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
@@ -472,8 +473,8 @@ void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
 	uint64_t base = request->TargetBaseAddress;
 	uint32_t count = request->TransferCount;
 	
-	uint8_t read_memory_resp[4096];//TODO: LOL !
-	memset(read_memory_resp, 0, 4096);
+	uint8_t read_memory_resp[MAX_KDNET_PKTLEN];
+	memset(read_memory_resp, 0, MAX_KDNET_PKTLEN);
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
 	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(read_memory_resp+sizeof(KDNET_POST_HEADER));
@@ -539,8 +540,8 @@ void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
 
 
 void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
-	uint8_t buffer[4096];//TODO: LOL !
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = roundup16(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT))-(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT));
@@ -583,8 +584,8 @@ void clearAllInternalBreakpointsCallBack(){
 }
 
 void getRegisterCallBack(){
-	uint8_t buffer[4096];//TODO: LOL !
-	memset(buffer, 0, 4096);
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
 	tmp->PacketPadding = roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64))-(8+16+16+sizeof(DBGKD_GET_REGISTER64));
