@@ -21,5 +21,7 @@ void push_8(FILE* fp, uint8_t data);
 uint64_t read64(uint64_t addr, const unsigned char* memory);
 off_t fileSize(int fd);
 inline uint64_t _rol64(uint64_t v, uint64_t s);
+void printHexData(uint8_t *tmp, int len);
+inline int roundup16(int value);
 
 #endif //__UTIL_H__

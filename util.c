@@ -29,3 +29,22 @@ off_t fileSize(int fd){
 inline uint64_t _rol64(uint64_t v, uint64_t s){
 	return (v<<s)|(v>>(64-s));
 }
+
+
+//TODO: util.c
+void printHexData(uint8_t *tmp, int len){
+	int i;
+	for(i=0; i<len; i++){
+		printf("%02x ", tmp[i]);
+		if(i%16==15){
+			printf("\n");
+		}
+	}
+	if(i%16 != 0){
+		printf("\n");
+	}
+}
+
+inline int roundup16(int value){
+ return (value + 15) & ~15;
+}

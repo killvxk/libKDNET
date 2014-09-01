@@ -33,6 +33,8 @@ BYTE controlKey[32] = {
 	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+
+
 	
 BYTE hmacKey[32];
 //Expanded key fo control canal
@@ -46,29 +48,10 @@ struct sockaddr_in sa;
 uint32_t pkt_number = 0;
 
 
-//Fake debugger
+//Fake debuggee
 uint8_t* raw_mem;
 off_t raw_mem_size;
 uint64_t cr3 =  0x00000000001a7000;
-
-//TODO: util.c
-void printHexData(uint8_t *tmp, int len){
-	int i;
-	for(i=0; i<len; i++){
-		printf("%02x ", tmp[i]);
-		if(i%16==15){
-			printf("\n");
-		}
-	}
-	if(i%16 != 0){
-		printf("\n");
-	}
-}
-
-inline int roundup16(int value){
- return (value + 15) & ~15;
-}
-
 
 int readVirtualMemory(uint64_t virtualAddr, uint32_t count, uint8_t* data){
 	uint64_t tmp = virtual_physical(virtualAddr, cr3, raw_mem, raw_mem_size);
@@ -81,6 +64,8 @@ int readVirtualMemory(uint64_t virtualAddr, uint32_t count, uint8_t* data){
 	}
 	return -1;
 }
+
+
 
 uint32_t checksumKD_PACKET(KD_PACKET_HEADER* pkt, uint16_t pkt_size){
 	uint8_t* tmp = (uint8_t*)pkt;
@@ -256,7 +241,9 @@ void printKDNET_PACKET(KDNET_PACKET_HEADER* pkt){
 
 //TODO: NO COPY !
 void sendDataPkt(uint8_t *data, int dataLen){
+#if DEBUG	
 	printf("[!] sendDataPkt %d\n", pkt_number);
+#endif
 	//Replace pkt number...
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)data;
 	tmp->PacketNumber = __builtin_bswap32(pkt_number++);
@@ -323,7 +310,7 @@ void breakCallBack(){
 		0x10, 0x00, 0x2b, 0x00, 0x2b, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 	};
 	
-	//TODO: !
+	//TODO: generate this from scratch !
 	sendDataPkt(wait_state, sizeof(wait_state));
 }
 
@@ -331,11 +318,12 @@ void breakCallBack(){
 
 uint32_t tmpID = 0x00000926;
 void resetCallBack(){
-		
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16;
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = 0x08; //TODO: Compute padding !
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x69696969;
@@ -347,7 +335,7 @@ void resetCallBack(){
 	tmpID++;
 	
 	//printf("\n\n[!] Send ACK Packet for %08x!\n", pkt_id);
-	sendDataPkt(buffer, roundup16(8+16));
+	sendDataPkt(buffer, roundup16(pkt_size));
 	
 	//Always send wait_state after reset...
 	breakCallBack();
@@ -356,13 +344,16 @@ void resetCallBack(){
 void GetVersionApiCallBack(DBGKD_MANIPULATE_STATE64* request){
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16+16+sizeof(DBGKD_GET_VERSION_API64);
+	
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = 0x00; //TODO: compute !
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
-	tmp_kdnet_pkt->DataSize = 0x38; // TODO: compute !
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
 	tmp_kdnet_pkt->PacketID = tmpID;
 	tmpID++;
 	tmpID++;
@@ -382,19 +373,21 @@ void GetVersionApiCallBack(DBGKD_MANIPULATE_STATE64* request){
 	tmp_get_version->DebuggerDataList = 0xfffff8026bef91f0;
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_GET_VERSION_API64));
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8);
 
 	printf("\n\n[!] Send Packet !\n");
-	printHexData(buffer, roundup16(8+16+16+sizeof(DBGKD_GET_VERSION_API64)));
+	printHexData(buffer, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt(buffer, roundup16(8+16+16+sizeof(DBGKD_GET_VERSION_API64)));
+	sendDataPkt(buffer, roundup16(pkt_size));
 }
 
 void AckPkt(uint32_t pkt_id){
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16;
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = 0x08; //TODO: Compute padding !
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x69696969;
@@ -404,7 +397,7 @@ void AckPkt(uint32_t pkt_id){
 	tmp_kdnet_pkt->PacketID = pkt_id;
 	
 	printf("\n\n[!] Send ACK Packet for %08x!\n", pkt_id);
-	sendDataPkt(buffer, roundup16(8+16));
+	sendDataPkt(buffer, roundup16(pkt_size));
 }
 
 void initCallBack(){
@@ -426,13 +419,17 @@ void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count;
+	
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
+	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
-	tmp_kdnet_pkt->DataSize = 16+40+count; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
+	tmp_kdnet_pkt->PacketID = tmpID; 
 	tmpID++;
 	tmpID++;
 	
@@ -458,50 +455,53 @@ void readMemoryCallBack(DBGKD_MANIPULATE_STATE64* request){
 	readVirtualMemory(base, count, tmp_read_memory->Data);
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8); 
 
 	printf("\n\n[!] Send Packet !\n");
-	printHexData(buffer, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count));
+	printHexData(buffer, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt(buffer, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-
+	sendDataPkt(buffer, roundup16(pkt_size));
 }
 
 
-void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
-	uint64_t base = request->TargetBaseAddress;
-	uint32_t count = request->TransferCount;
+void readControlSpaceCallBack(DBGKD_MANIPULATE_STATE64* request){
+	uint64_t base = request->u.ReadMemory.TargetBaseAddress;
+	uint32_t count = request->u.ReadMemory.TransferCount;
 	
 	uint8_t read_memory_resp[MAX_KDNET_PKTLEN];
 	memset(read_memory_resp, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count;
+	
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)read_memory_resp;
-	tmp->PacketPadding = roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)-(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count);
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
+	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(read_memory_resp+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
-	tmp_kdnet_pkt->DataSize = 16+40+count; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
+	printf("PLOP %d %d\n", pkt_size, tmp_kdnet_pkt->DataSize);
+	tmp_kdnet_pkt->PacketID = tmpID;
 	tmpID++;
 	tmpID++;
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdReadControlSpaceApi;
-	tmp_manipulate_state->ProcessorLevel = 0x0000; //TODO: Hu ?
-	tmp_manipulate_state->Processor = 0x0000; //TODO: Hu ?
+	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel
+	tmp_manipulate_state->Processor = request->Processor
 	tmp_manipulate_state->ReturnStatus = 0x0;
-	//tmp_manipulate_state->Unknown = 0x0;
 	
 	DBGKD_READ_MEMORY64* tmp_read_memory = &tmp_manipulate_state->u.ReadMemory;
 	tmp_read_memory->TargetBaseAddress = base;
 	tmp_read_memory->TransferCount = count;
 	tmp_read_memory->ActualBytesRead = count;
-	tmp_read_memory->Unknown1 = request->Unknown1; //TODO: hu ?
-	tmp_read_memory->Unknown2 = request->Unknown2; //TODO: hu ?
-	tmp_read_memory->Unknown3 = request->Unknown3; //TODO: hu ?
-	tmp_read_memory->Unknown4 = request->Unknown4; //TODO: hu ?
-	tmp_read_memory->Unknown5 = request->Unknown5; //TODO: hu ?
-	tmp_read_memory->Unknown6 = request->Unknown6; //TODO: hu ?
+	tmp_read_memory->Unknown1 = request->u.ReadMemory.Unknown1; //TODO: hu ?
+	tmp_read_memory->Unknown2 = request->u.ReadMemory.Unknown2; //TODO: hu ?
+	tmp_read_memory->Unknown3 = request->u.ReadMemory.Unknown3; //TODO: hu ?
+	tmp_read_memory->Unknown4 = request->u.ReadMemory.Unknown4; //TODO: hu ?
+	tmp_read_memory->Unknown5 = request->u.ReadMemory.Unknown5; //TODO: hu ?
+	tmp_read_memory->Unknown6 = request->u.ReadMemory.Unknown6; //TODO: hu ?
+	
 	//TODO: callback !
 	//readVirtualMemory(base, count, tmp_read_memory->Data);
 	if(base == 1){ //&Prcb
@@ -528,12 +528,12 @@ void readControlSpaceCallBack(DBGKD_READ_MEMORY64* request){
 	}
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8);
 	
 	printf("\n\n[!] Send Packet !\n");
-	printHexData((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count));
+	printHexData((uint8_t*)tmp, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+(sizeof(DBGKD_READ_MEMORY64)-1)+count)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size));
 
 }
 
@@ -543,14 +543,16 @@ void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	
+	uint16_t pkt_size = 8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT);
+
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = roundup16(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT))-(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT));
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
 	tmp_kdnet_pkt->DataSize = 56; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmp_kdnet_pkt->PacketID = tmpID; 
 	tmpID++;
 	tmpID++;
 	
@@ -569,12 +571,12 @@ void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
 	}
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_RESTORE_BREAKPOINT)); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 	
-	printf("\n\n[!] Send Packet size %d!\n", roundup16(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT)));
-	printHexData((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT)));
+	printf("\n\n[!] Send Packet size %d!\n", roundup16(pkt_size));
+	printHexData((uint8_t*)tmp, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_RESTORE_BREAKPOINT))); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 
 }
 
@@ -583,24 +585,27 @@ void clearAllInternalBreakpointsCallBack(){
 	//TODO: CallBack !
 }
 
+//TODO: request
 void getRegisterCallBack(){
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
 	
+	uint16_t pkt_size = 8+16+16+sizeof(DBGKD_GET_REGISTER64);
+
 	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
-	tmp->PacketPadding = roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64))-(8+16+16+sizeof(DBGKD_GET_REGISTER64));
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
 	
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
-	tmp_kdnet_pkt->DataSize = 1288; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
-	tmp_kdnet_pkt->PacketID = tmpID; //TODO: Dafuq ?
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
+	tmp_kdnet_pkt->PacketID = tmpID; 
 	tmpID++;
 	tmpID++;
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdGetRegister;
-	tmp_manipulate_state->ProcessorLevel = 0x0; //TODO: Hu ?
+	tmp_manipulate_state->ProcessorLevel = 0x0; //TODO: Hu ? //TODO: request !
 	tmp_manipulate_state->Processor = 0x0; //TODO: Hu ?
 	tmp_manipulate_state->ReturnStatus = 0x0;
 	tmp_manipulate_state->Padding = 0x0;
@@ -620,12 +625,12 @@ void getRegisterCallBack(){
 	}
 	
 	//Compute checksum
-	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, 16+16+sizeof(DBGKD_GET_REGISTER64)); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 	
-	printf("\n\n[!] Send Packet size %d!\n", roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64)));
-	printHexData((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64)));
+	printf("\n\n[!] Send Packet size %d!\n", roundup16(pkt_size));
+	printHexData((uint8_t*)tmp, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
-	sendDataPkt((uint8_t*)tmp, roundup16(8+16+16+sizeof(DBGKD_GET_REGISTER64))); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 
 }
 
@@ -662,7 +667,7 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 					//printf("DbgKdReadControlSpaceApi");
 					AckPkt(pkt->PacketID);
 					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
-					readControlSpaceCallBack(&tmp->u.ReadMemory);
+					readControlSpaceCallBack(tmp);
 					return;
 				}
 				case DbgKdReadVirtualMemoryApi:
@@ -703,6 +708,12 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 	
 }
 
+
+/**
+ * 
+ * Main KDNET server main
+ * 
+ */ 
 void kd_server(){
 	
 	//struct sockaddr_in Debuggee_sa;
@@ -717,6 +728,7 @@ void kd_server(){
 	sa.sin_addr.s_addr = inet_addr("192.168.0.11");
 	sa.sin_port = htons(50000);
 	
+	//TODO: create poke from scratch !
 	//Send POKE
 	pkt_number++;
 	sendto(socket_fd, poke, sizeof(poke), 0, (struct sockaddr *)&sa,sizeof(sa));
@@ -724,7 +736,6 @@ void kd_server(){
 	//Receive POKE_RESP
 	uint8_t buffer[2048];
 	int n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
-	//int i;
 	BYTE *unciphered_poke_resp = cbc_decrypt(buffer+6, n-6-16, controlW, buffer+n-16);
 	
 	//Compute the data canal key with POKE_RESP
@@ -736,7 +747,7 @@ void kd_server(){
 	SHA256Final(&mySHA256Context, dataKey);
 	aes_key_setup(dataKey, dataW, 256);
 	
-	
+	//TODO: create conn_check from scratch !
 	uint8_t connection_check[] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x0b, 0x00, 0xa8, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
@@ -748,7 +759,7 @@ void kd_server(){
 	n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
 	printf("Packet received : %d bytes \n", n);
 	
-	//Connection established !
+	//Here the connection is established !
 	
 	//Get next_packet !
 	while(1){
@@ -776,24 +787,43 @@ int main(int argc, char* argv[]){
 	initCallBack();
 
 	int i;
+#if DEBUG
 	printf("controlKey :\n");
 	for(i=0; i<32; i++){
 		printf("%02x ", controlKey[i]);
 	}
 	printf("\n");
+#endif
+	//Expand controlKey
 	aes_key_setup(controlKey, controlW, 256);
-	
+
+
+#if DEBUG
 	printf("hmacKey :\n");
 	for(i=0; i<32; i++){
-		hmacKey[i] = controlKey[i]^0xFF;
 		printf("%02x ", hmacKey[i]);
 	}
 	printf("\n");
+#endif
+	//Generate hmacKey from controlKey
+	for(i=0; i<32; i++){
+		hmacKey[i] = controlKey[i]^0xFF;
+	}
+	
+	
+	
+	
+	
 	
 	if(argc == 2){
 		kd_server();
 	}
 
+
+//
+//
+//All my tests !
+//---------------------
 	printf("\nPoke :\n");
 	//KDNET_PACKET_HEADER* poke_pkt = (KDNET_PACKET_HEADER*)poke;
 	//printKDNET_PACKET(poke_pkt);
