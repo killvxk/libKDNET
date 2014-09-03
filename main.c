@@ -85,13 +85,22 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 	printf("PacketID: %08x\n", pkt->PacketID);
 	printf("Checksum: %08x\n", pkt->Checksum);
 	
+	if(pkt->Signature == 0x00000000){
+		printf("POKE\n");
+		return;
+	}
+	
 	if(pkt->Signature == 0x00000062){
 		printf("BREAKIN\n");
 		return;
 	}
 	
 	if(pkt->Signature == 0x69696969){
-		if(pkt->PacketType == 0x0006){
+		if(pkt->PacketType == 0x0005){
+			//TODO: !!
+			printf("TODO\n");
+			return;
+		} else if(pkt->PacketType == 0x0006){
 			printf("RESET\n");
 			return;
 		}else if(pkt->PacketType == 0x0004){
@@ -224,9 +233,49 @@ void printKD_PACKET(KD_PACKET_HEADER* pkt){
 			printf("DbgKdClearAllInternalBreakpointsApi\n");
 			break;
 		}
+		case DbgKdSetContextApi:
+		{
+			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+			printf("ApiNumber %08x\n", tmp->ApiNumber);
+			printf("ProcessorLevel %04x\n", tmp->ProcessorLevel);
+			printf("Processor %04x\n", tmp->Processor);
+			printf("ReturnStatus %08x\n", tmp->ReturnStatus);
+			printf("ContextFlags %08x\n", tmp->u.SetContext.ContextFlags);
+			break;
+		}
+		case DbgKdContinueApi2:
+		{
+			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+			printf("ApiNumber %08x\n", tmp->ApiNumber);
+			printf("ProcessorLevel %04x\n", tmp->ProcessorLevel);
+			printf("Processor %04x\n", tmp->Processor);
+			printf("ReturnStatus %08x\n", tmp->ReturnStatus);
+			
+			printf("ContinueStatus %08x\n", tmp->u.Continue2.ContinueStatus);
+			printf("TraceFlag %08x\n", tmp->u.Continue2.ControlSet.TraceFlag);
+			printf("Dr7 0x%016lx\n", tmp->u.Continue2.ControlSet.Dr7);
+			printf("CurrentSymbolStart 0x%016lx\n", tmp->u.Continue2.ControlSet.CurrentSymbolStart);
+			printf("CurrentSymbolEnd 0x%016lx\n", tmp->u.Continue2.ControlSet.CurrentSymbolEnd);
+			break;
+		}
+		case DbgKdQueryMemoryApi:
+		{
+			DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+			printf("ApiNumber %08x\n", tmp->ApiNumber);
+			printf("ProcessorLevel %04x\n", tmp->ProcessorLevel);
+			printf("Processor %04x\n", tmp->Processor);
+			printf("ReturnStatus %08x\n", tmp->ReturnStatus);
+			
+			
+			printf("Address 0x%016lx\n", tmp->u.QueryMemory.Address);
+			printf("Reserved 0x%016lx\n", tmp->u.QueryMemory.Reserved);
+			printf("AddressSpace %08x\n", tmp->u.QueryMemory.AddressSpace);
+			printf("Flags %08x\n", tmp->u.QueryMemory.Flags);
+		}
 		default:
 		{
 			printf("Unknown packet\n");
+			//exit(0);
 			break;
 		}
 	}
@@ -487,8 +536,8 @@ void readControlSpaceCallBack(DBGKD_MANIPULATE_STATE64* request){
 	
 	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
 	tmp_manipulate_state->ApiNumber = DbgKdReadControlSpaceApi;
-	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel
-	tmp_manipulate_state->Processor = request->Processor
+	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel;
+	tmp_manipulate_state->Processor = request->Processor;
 	tmp_manipulate_state->ReturnStatus = 0x0;
 	
 	DBGKD_READ_MEMORY64* tmp_read_memory = &tmp_manipulate_state->u.ReadMemory;
@@ -538,7 +587,7 @@ void readControlSpaceCallBack(DBGKD_MANIPULATE_STATE64* request){
 }
 
 
-
+//TODO (DBGKD_MANIPULATE_STATE64* request){
 void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
 	uint8_t buffer[MAX_KDNET_PKTLEN];
 	memset(buffer, 0, MAX_KDNET_PKTLEN);
@@ -551,7 +600,7 @@ void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
 	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
 	tmp_kdnet_pkt->Signature = 0x30303030;
 	tmp_kdnet_pkt->PacketType = 0x0002;
-	tmp_kdnet_pkt->DataSize = 56; //header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
 	tmp_kdnet_pkt->PacketID = tmpID; 
 	tmpID++;
 	tmpID++;
@@ -577,7 +626,41 @@ void restoreBreakPointCallBack(DBGKD_RESTORE_BREAKPOINT* request){
 	printHexData((uint8_t*)tmp, roundup16(pkt_size));
 	printKD_PACKET(tmp_kdnet_pkt);
 	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+}
 
+void setContextApiCallBack(DBGKD_MANIPULATE_STATE64* request){
+	uint8_t buffer[MAX_KDNET_PKTLEN];
+	memset(buffer, 0, MAX_KDNET_PKTLEN);
+	
+	uint16_t pkt_size = 8+16+16+sizeof(DBGKD_SET_CONTEXT);
+
+	KDNET_POST_HEADER* tmp = (KDNET_POST_HEADER*)buffer;
+	tmp->PacketPadding = roundup16(pkt_size)-pkt_size;
+	
+	KD_PACKET_HEADER* tmp_kdnet_pkt = (KD_PACKET_HEADER*)(buffer+sizeof(KDNET_POST_HEADER));
+	tmp_kdnet_pkt->Signature = 0x30303030;
+	tmp_kdnet_pkt->PacketType = 0x0002;
+	tmp_kdnet_pkt->DataSize = pkt_size-16-8; //-header(KDNET_POST_HEADER)-header(KD_PACKET_HEADER)
+	tmp_kdnet_pkt->PacketID = tmpID; 
+	tmpID++;
+	tmpID++;
+	
+	DBGKD_MANIPULATE_STATE64* tmp_manipulate_state = (DBGKD_MANIPULATE_STATE64*)&tmp_kdnet_pkt->PacketBody[0];
+	tmp_manipulate_state->ApiNumber = DbgKdReadControlSpaceApi;
+	tmp_manipulate_state->ProcessorLevel = request->ProcessorLevel;
+	tmp_manipulate_state->Processor = request->Processor;
+	tmp_manipulate_state->ReturnStatus = 0x0;
+	
+	DBGKD_SET_CONTEXT* tmp_set_context = &tmp_manipulate_state->u.SetContext;
+	tmp_set_context->ContextFlags = 0x00000002;
+	
+	//Compute checksum
+	tmp_kdnet_pkt->Checksum = checksumKD_PACKET(tmp_kdnet_pkt, pkt_size-8); //header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
+	
+	printf("\n\n[!] Send Packet size %d!\n", roundup16(pkt_size));
+	printHexData((uint8_t*)tmp, roundup16(pkt_size));
+	printKD_PACKET(tmp_kdnet_pkt);
+	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 }
 
 void clearAllInternalBreakpointsCallBack(){
@@ -632,6 +715,10 @@ void getRegisterCallBack(){
 	printKD_PACKET(tmp_kdnet_pkt);
 	sendDataPkt((uint8_t*)tmp, roundup16(pkt_size)); //header(KDNET_POST_HEADER)+header(KD_PACKET_HEADER)+header(DBGKD_MANIPULATE_STATE64)+header(DBGKD_READ_MEMORY64)+count
 
+}
+
+void continueApi2CallBack(DBGKD_MANIPULATE_STATE64* request){
+	//TODO: continue callback!
 }
 
 void handleKD_PACKET(KD_PACKET_HEADER* pkt){
@@ -697,6 +784,21 @@ void handleKD_PACKET(KD_PACKET_HEADER* pkt){
 					getRegisterCallBack();
 					return;
 				}
+				case DbgKdSetContextApi:
+				{
+					AckPkt(pkt->PacketID);
+					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+					setContextApiCallBack(tmp);
+					return;
+				}
+				case DbgKdContinueApi2: //TODO: not working :(
+				{
+					AckPkt(pkt->PacketID);
+					DBGKD_MANIPULATE_STATE64* tmp = (DBGKD_MANIPULATE_STATE64*)&pkt->PacketBody[0];
+					continueApi2CallBack(tmp);
+					return;
+				}
+				case DbgKdQueryMemoryApi: //TODO
 				default:
 					printf("Unknown ApiNumber %08x\n", pkt->ApiNumber);
 					printf("FATAL\n");
@@ -766,6 +868,7 @@ void kd_server(){
 		n=recvfrom(socket_fd, buffer, sizeof(buffer), 0, NULL, NULL);
 		printf("\n\n[!] Packet received : %d bytes >>>>>>\n", n);
 		BYTE *unciphered_pkt = cbc_decrypt(buffer+6, n-6-16, dataW, buffer+n-16);
+		printHexData(unciphered_pkt, n-6-16);
 		printf("<<<<\n");
 
 		printKD_PACKET((KD_PACKET_HEADER*)(unciphered_pkt+8));
@@ -782,6 +885,10 @@ void kd_server(){
 //http://visi.kenshoto.com/static/apidocs/vstruct.defs.kdcom-module.html
 //https://code.google.com/p/reactos-mirror/source/browse/trunk/reactos/include/reactos/windbgkd.h
 int main(int argc, char* argv[]){
+
+	//printKD_PACKET((KD_PACKET_HEADER*)(unciphered_go+8));
+	//exit(0);
+
 
 	//TODO: move this !
 	initCallBack();
@@ -878,6 +985,9 @@ int main(int argc, char* argv[]){
 	}
 	printf("\n");
 	
+	
+	
+	
 	pcap_t *handle; 
     char errbuf[PCAP_ERRBUF_SIZE]; //not sure what to do with this, oh well 
     handle = pcap_open_offline("/home/arfarf/git/samples/debug_trace.pcap", errbuf);   //call pcap library function 
@@ -892,7 +1002,8 @@ int main(int argc, char* argv[]){
 		if(debug_pkt[5] == 0){//Only Data Packet
 			BYTE *unciphered_debug_pkt = cbc_decrypt(debug_pkt+6, debug_pkt_len-6-16, dataW, debug_pkt+debug_pkt_len-16);
 			KD_PACKET_HEADER* tmp = (KD_PACKET_HEADER*)(unciphered_debug_pkt+8);
-			if(tmp->ApiNumber == 0x3030){
+			//if(tmp->ApiNumber == DbgKdContinueApi2){
+			if(pkt_num == 680 || pkt_num == 681){
 				printf("%d.\n", pkt_num);
 				printHexData(unciphered_debug_pkt, debug_pkt_len-6-16);
 				printKD_PACKET(tmp);

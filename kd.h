@@ -228,6 +228,35 @@ typedef struct _DBGKD_RESTORE_BREAKPOINT
     
 } DBGKD_RESTORE_BREAKPOINT, *PDBGKD_RESTORE_BREAKPOINT;
 
+typedef struct _DBGKD_SET_CONTEXT
+{
+    ULONG ContextFlags;
+} DBGKD_SET_CONTEXT, *PDBGKD_SET_CONTEXT;
+
+
+typedef struct _AMD64_DBGKD_CONTROL_SET
+{
+    ULONG TraceFlag;
+    ULONG64 Dr7;
+    ULONG64 CurrentSymbolStart;
+    ULONG64 CurrentSymbolEnd;
+} AMD64_DBGKD_CONTROL_SET, *PAMD64_DBGKD_CONTROL_SET;
+
+typedef struct _DBGKD_CONTINUE2
+{
+    NTSTATUS ContinueStatus;
+	AMD64_DBGKD_CONTROL_SET ControlSet;
+} DBGKD_CONTINUE2, *PDBGKD_CONTINUE2;
+
+
+typedef struct _DBGKD_QUERY_MEMORY
+{
+    ULONG64 Address;
+    ULONG64 Reserved;
+    ULONG AddressSpace;
+    ULONG Flags;
+} DBGKD_QUERY_MEMORY, *PDBGKD_QUERY_MEMORY;
+
 typedef struct _DBGKD_MANIPULATE_STATE64
 {
     ULONG ApiNumber;
@@ -239,13 +268,13 @@ typedef struct _DBGKD_MANIPULATE_STATE64
     {
         DBGKD_READ_MEMORY64 ReadMemory;
         /*DBGKD_WRITE_MEMORY64 WriteMemory;
-        DBGKD_GET_CONTEXT GetContext;
+        DBGKD_GET_CONTEXT GetContext;*/
         DBGKD_SET_CONTEXT SetContext;
-        DBGKD_WRITE_BREAKPOINT64 WriteBreakPoint;*/
+        //DBGKD_WRITE_BREAKPOINT64 WriteBreakPoint;
         DBGKD_RESTORE_BREAKPOINT RestoreBreakPoint;
-        /*DBGKD_CONTINUE Continue;
+        /*DBGKD_CONTINUE Continue;*/
         DBGKD_CONTINUE2 Continue2;
-        DBGKD_READ_WRITE_IO64 ReadWriteIo;
+        /*DBGKD_READ_WRITE_IO64 ReadWriteIo;
         DBGKD_READ_WRITE_IO_EXTENDED64 ReadWriteIoExtended;
         DBGKD_QUERY_SPECIAL_CALLS QuerySpecialCalls;
         DBGKD_SET_SPECIAL_CALL64 SetSpecialCall;
@@ -256,9 +285,9 @@ typedef struct _DBGKD_MANIPULATE_STATE64
         DBGKD_READ_WRITE_MSR ReadWriteMsr;
         DBGKD_SEARCH_MEMORY SearchMemory;
         DBGKD_GET_SET_BUS_DATA GetSetBusData;
-        DBGKD_FILL_MEMORY FillMemory;
+        DBGKD_FILL_MEMORY FillMemory;*/
         DBGKD_QUERY_MEMORY QueryMemory;
-        DBGKD_SWITCH_PARTITION SwitchPartition;*/
+        /*DBGKD_SWITCH_PARTITION SwitchPartition;*/
         DBGKD_GET_REGISTER64 GetRegisters;
         DBGKD_GET_VERSION_API64 GetVersion;
     } u;
